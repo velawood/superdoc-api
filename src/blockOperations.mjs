@@ -115,6 +115,67 @@ function getBlockInfo(editor, uuid) {
 }
 
 /**
+ * Find the editor position of a specific text within a block.
+ * This handles variable node structures (multiple runs, bookmarks, etc.)
+ * where the offset from block position varies throughout the block.
+ *
+ * @param {Editor} editor - Editor instance
+ * @param {number} blockPos - Block position in document
+ * @param {number} blockSize - Block node size
+ * @param {string} searchText - The exact text to find
+ * @returns {number|null} - Editor position where text starts, or null if not found
+ */
+function findTextInBlock(editor, blockPos, blockSize, searchText) {
+  const searchLen = searchText.length;
+  const maxPos = blockPos + blockSize;
+  
+  for (let pos = blockPos; pos < maxPos - searchLen; pos++) {
+    try {
+      const text = editor.state.doc.textBetween(pos, pos + searchLen);
+      if (text === searchText) {
+        return pos;
+      }
+    } catch (e) {
+      // Position might be at a node boundary, continue
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Build a mapping from text positions to editor positions for a block.
+ * This handles blocks with complex internal structure (multiple runs, bookmarks).
+ *
+ * @param {Editor} editor - Editor instance  
+ * @param {number} blockPos - Block position in document
+ * @param {string} blockText - The full text content of the block
+ * @param {number} blockSize - Block node size
+ * @returns {number[]} - Array where index is text position and value is editor position
+ */
+function buildPositionMap(editor, blockPos, blockText, blockSize) {
+  const map = new Array(blockText.length);
+  let editorPos = blockPos;
+  let textPos = 0;
+  
+  // Walk through finding each character
+  while (textPos < blockText.length && editorPos < blockPos + blockSize) {
+    try {
+      const char = editor.state.doc.textBetween(editorPos, editorPos + 1);
+      if (char === blockText[textPos]) {
+        map[textPos] = editorPos;
+        textPos++;
+      }
+      editorPos++;
+    } catch (e) {
+      editorPos++;
+    }
+  }
+  
+  return map;
+}
+
+/**
  * Apply word-level diff to produce minimal tracked changes.
  *
  * CRITICAL FIX: Operations must be applied in REVERSE order (end-to-start)
@@ -140,9 +201,9 @@ function applyWordDiff(editor, pos, node, originalText, newText, author, comment
 
   let stats = { insertions: 0, deletions: 0, unchanged: 0 };
 
-  // SuperDoc uses paragraph > run > text structure, so content is at pos + 2
-  // (pos + 1 would be the run node opening, pos + 2 is the actual text)
-  const contentStart = pos + 2;
+  // Build a complete position map for the block
+  // This handles complex node structures with multiple runs, bookmarks, etc.
+  const positionMap = buildPositionMap(editor, pos, originalText, node.nodeSize);
 
   // CRITICAL: Sort operations by position in DESCENDING order (end-to-start)
   // This ensures earlier positions remain valid as we modify from the end
@@ -156,8 +217,18 @@ function applyWordDiff(editor, pos, node, originalText, newText, author, comment
     let success = true;
     
     if (op.type === 'delete') {
-      const from = contentStart + op.position;
-      const to = from + op.text.length;
+      // Use position map to get actual editor positions
+      const from = positionMap[op.position];
+      const toTextPos = op.position + op.text.length - 1;
+      const to = positionMap[toTextPos] + 1; // +1 because we want to include the last char
+      
+      if (from === undefined || to === undefined) {
+        return {
+          success: false,
+          error: `Could not map text position ${op.position} to editor position`,
+          blockId: node.attrs.sdBlockId
+        };
+      }
 
       // Use chain().run() for atomic execution if available
       if (editor.chain) {
@@ -172,7 +243,16 @@ function applyWordDiff(editor, pos, node, originalText, newText, author, comment
 
       stats.deletions++;
     } else if (op.type === 'insert') {
-      const insertAt = contentStart + op.position;
+      // For insert, use the position just before or at the insertion point
+      const insertAt = positionMap[op.position] || positionMap[op.position - 1] + 1;
+      
+      if (insertAt === undefined) {
+        return {
+          success: false,
+          error: `Could not map text position ${op.position} to editor position`,
+          blockId: node.attrs.sdBlockId
+        };
+      }
 
       // Use chain().run() for atomic execution if available
       if (editor.chain) {
@@ -187,8 +267,18 @@ function applyWordDiff(editor, pos, node, originalText, newText, author, comment
 
       stats.insertions++;
     } else if (op.type === 'replace') {
-      const from = contentStart + op.position;
-      const to = from + op.deleteText.length;
+      // Use position map to get actual editor positions
+      const from = positionMap[op.position];
+      const toTextPos = op.position + op.deleteText.length - 1;
+      const to = positionMap[toTextPos] + 1; // +1 because we want to include the last char
+      
+      if (from === undefined || to === undefined) {
+        return {
+          success: false,
+          error: `Could not map text position ${op.position} to editor position`,
+          blockId: node.attrs.sdBlockId
+        };
+      }
 
       // Use chain().run() for atomic execution if available
       if (editor.chain) {
@@ -238,10 +328,21 @@ function applyWordDiff(editor, pos, node, originalText, newText, author, comment
  * @returns {OperationResult}
  */
 function applyFullReplace(editor, pos, node, newText, author, comment) {
-  // SuperDoc uses paragraph > run > text structure
-  // Content text starts at pos + 2, ends at pos + nodeSize - 2
-  const from = pos + 2;
-  const to = pos + node.nodeSize - 2;
+  // Build position map to find actual content boundaries
+  const originalText = extractNodeText(node);
+  const positionMap = buildPositionMap(editor, pos, originalText, node.nodeSize);
+  
+  // Get from (first char) and to (after last char)
+  const from = positionMap[0];
+  const to = positionMap[originalText.length - 1] + 1;
+  
+  if (from === undefined || to === undefined) {
+    return {
+      success: false,
+      error: 'Could not determine content boundaries',
+      blockId: node.attrs.sdBlockId
+    };
+  }
 
   // Select all content and replace
   editor.commands.setTextSelection({ from, to });
@@ -558,10 +659,15 @@ export async function addCommentToBlock(editor, blockId, commentText, author = D
   }
 
   const { node, pos } = blockInfo;
-  // SuperDoc uses paragraph > run > text structure
-  // Content text starts at pos + 2, ends at pos + nodeSize - 2
-  const from = pos + 2;
-  const to = pos + node.nodeSize - 2;
+  // Build position map to find actual content boundaries
+  const originalText = extractNodeText(node);
+  const positionMap = buildPositionMap(editor, pos, originalText, node.nodeSize);
+  const from = positionMap[0];
+  const to = positionMap[originalText.length - 1] + 1;
+  
+  if (from === undefined || to === undefined) {
+    return { success: false, error: 'Could not determine content boundaries' };
+  }
 
   // Set selection
   editor.commands.setTextSelection({ from, to });
