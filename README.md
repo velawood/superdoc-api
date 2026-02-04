@@ -375,6 +375,17 @@ To replace the entire block content (useful for complete rewrites):
 | `type` | string | Block type for insert: `paragraph\|heading\|listItem` |
 | `level` | number | Heading level for insert (1-6) |
 
+### Common Field Name Errors
+
+These incorrect field names will cause validation to fail:
+
+| Wrong | Correct | Notes |
+|-------|---------|-------|
+| `searchText` | - | Not used - edits are block-based, not search-based |
+| `replaceText` | `newText` | Use `newText` for replacement content |
+| `type` | `operation` | Use `operation` for the edit type |
+| `oldText` | - | Not used in edits (used internally for validation) |
+
 ---
 
 ## IR Format
