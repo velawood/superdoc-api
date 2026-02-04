@@ -1,21 +1,27 @@
 ---
 name: Contract Review Agentic Skill
-description: Orchestrator-Subagent methodology for AI agents to systematically review and amend contracts using superdoc-redlines with parallel sub-agents
+description: Orchestrator-subagent methodology for parallel contract review using superdoc-redlines
 ---
 
 # Contract Review Agentic Skill
 
 ## Overview
 
-This skill enables **parallel contract review** using an orchestrator-subagent architecture inspired by Harvey AI's document editing system. The orchestrator agent coordinates multiple sub-agents that work on different sections simultaneously, then merges their edits.
+This skill enables **parallel contract review** using an orchestrator-subagent architecture. The orchestrator coordinates multiple sub-agents working on different sections simultaneously, then merges their edits.
 
-### When to Use This Skill
+**Prerequisites:** Familiarity with **CONTRACT-REVIEW-SKILL.md** (core methodology, edit formats, two-pass workflow).
 
-| Document Size | Approach | Reason |
-|---------------|----------|--------|
-| < 50K tokens | Single-agent (CONTRACT-REVIEW-SKILL.md) | Overhead of coordination exceeds benefit |
-| 50K - 150K tokens | 2-4 sub-agents | Good parallelization gains |
-| > 150K tokens | 4-8 sub-agents | Essential for comprehensive coverage |
+> **⚠️ Examples Are Illustrative Only**
+> 
+> Examples use UK → Singapore conversion. The architecture applies to any contract review task.
+
+### When to Use
+
+| Document Size | Approach |
+|---------------|----------|
+| < 50K tokens | Single-agent (CONTRACT-REVIEW-SKILL.md) |
+| 50K - 150K tokens | 2-4 sub-agents |
+| > 150K tokens | 4-8 sub-agents |
 
 ---
 
@@ -24,235 +30,104 @@ This skill enables **parallel contract review** using an orchestrator-subagent a
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        ORCHESTRATOR AGENT                           │
-│  - Performs Discovery Pass (read all chunks)                        │
-│  - Builds Context Document (defined terms, cross-references)        │
-│  - Plans work decomposition                                         │
-│  - Spawns sub-agents with assigned sections                        │
-│  - Merges results and validates                                     │
+│  - Discovery Pass (read all chunks, build Context Document)         │
+│  - Work decomposition (assign block ranges to sub-agents)          │
+│  - Merge results and validate                                       │
 └─────────────────────────────────────────────────────────────────────┘
                                  │
            ┌─────────────────────┼─────────────────────┐
-           │                     │                     │
            ▼                     ▼                     ▼
     ┌─────────────┐       ┌─────────────┐       ┌─────────────┐
     │ SUB-AGENT A │       │ SUB-AGENT B │       │ SUB-AGENT C │
-    │ Definitions │       │ Warranties  │       │ Schedules   │
-    │ b001-b200   │       │ b201-b500   │       │ b501-b800   │
+    │ b001-b300   │       │ b301-b600   │       │ b601-b900   │
     └──────┬──────┘       └──────┬──────┘       └──────┬──────┘
            │                     │                     │
            ▼                     ▼                     ▼
-    edits-defs.json       edits-warr.json       edits-sched.json
+    edits-a.json          edits-b.json          edits-c.json
            │                     │                     │
            └─────────────────────┼─────────────────────┘
-                                 │
                                  ▼
                     ┌─────────────────────────┐
                     │    MERGE & VALIDATE     │
-                    │    merged-edits.json    │
-                    └─────────────────────────┘
-                                 │
-                                 ▼
-                    ┌─────────────────────────┐
-                    │    APPLY TO DOCUMENT    │
-                    │    contract-amended.docx│
+                    │    → APPLY              │
                     └─────────────────────────┘
 ```
 
 ---
 
-## Phase 1: Orchestrator Discovery Pass
+## Phase 1: Orchestrator Discovery
 
-The orchestrator MUST complete a full discovery pass before spawning sub-agents.
+The orchestrator completes a **full discovery pass** before spawning sub-agents.
 
-### Step 1.1: Get Document Statistics
+### Step 1.1: Get Stats & Extract IR
 
 ```bash
-cd /path/to/superdoc-redlines
 node superdoc-redline.mjs read --input contract.docx --stats-only
-```
-
-**Output:**
-```json
-{
-  "success": true,
-  "stats": {
-    "blockCount": 1337,
-    "estimatedTokens": 143242,
-    "recommendedChunks": 15
-  }
-}
-```
-
-### Step 1.2: Extract Full IR
-
-```bash
 node superdoc-redline.mjs extract --input contract.docx --output contract-ir.json
 ```
 
-This creates the authoritative block ID mapping for all agents.
-
-### Step 1.3: Read All Chunks (Discovery)
-
-Process every chunk to build the Context Document:
+### Step 1.2: Read All Chunks
 
 ```bash
-# Read chunks sequentially until hasMore: false
 node superdoc-redline.mjs read --input contract.docx --chunk 0 --max-tokens 10000
-node superdoc-redline.mjs read --input contract.docx --chunk 1 --max-tokens 10000
-# ... continue until complete
+# ... continue until hasMore: false
 ```
 
-### Step 1.4: Definitions Audit (CRITICAL)
+### Step 1.3: Build Context Document
 
-**⚠️ This step is MANDATORY before building the Context Document.**
-
-Systematically scan the Definitions section and:
-
-1. **List EVERY defined term** in the Definitions section
-2. **Flag UK-specific definitions for DELETE**:
-   - TUPE (Transfer of Undertakings regulations)
-   - TULRCA (Trade Union and Labour Relations Act)
-   - Working Time Regulations
-   - Any UK statute that has no Singapore equivalent
-3. **Identify compound defined terms**:
-   - Search for terms that CONTAIN other terms being changed
-   - Example: "VAT Records" contains "VAT" → must change to "GST Records"
-4. **Record block IDs for ALL items requiring deletion**
-
-### Step 1.5: Build Context Document
-
-Create a comprehensive Context Document with ALL information sub-agents will need:
+See CONTRACT-REVIEW-SKILL.md for Context Document template. For agentic workflow, add:
 
 ```markdown
-# Context Document: [Contract Name]
-# Generated by Orchestrator: [timestamp]
+## Sub-Agent Assignments
+| Agent | Block Range | Section | Key Tasks |
+|-------|-------------|---------|-----------|
+| A | b001-b300 | Definitions | Term changes, deletions |
+| B | b301-b600 | Provisions | Tax provisions |
+| C | b601-b900 | Warranties | Employment, general |
 
-## Document Statistics
-- Total blocks: 1337
-- Total chunks: 15
-- Estimated tokens: 143,242
-
-## Review Instructions
-[Copy the user's original review instructions here]
-
-## Defined Terms Registry
-
-### Terms to Change (UK → Singapore)
-| Term | Definition Block | All Usage Blocks | New Term |
-|------|-----------------|------------------|----------|
-| VAT | b259 | b259, b395, b396, b450, b512, b678, b890 | GST |
-| HMRC | b210 | b210, b131, b445, b623, b799 | IRAS |
-| Companies Act 2006 | b180 | b180, b274, b512, b844 | Companies Act 1967 |
-| DPA 1998 | b194 | b194, b892, b920 | PDPA |
-
-### Compound Defined Terms (CRITICAL)
-**⚠️ These are separate defined terms that CONTAIN other terms being changed. Sub-agents MUST change these.**
-
-| Compound Term | Contains | Definition Block | Usage Blocks | New Term |
-|---------------|----------|------------------|--------------|----------|
-| VAT Records | VAT | b263 | b263, b512 | GST Records |
-| VAT Returns | VAT | b264 | b264, b450 | GST Returns |
-
-### UK-Specific Definitions to DELETE (CRITICAL)
-**⚠️ These definition blocks MUST be deleted by the sub-agent assigned to their block range. No Singapore equivalent exists.**
-
-| Term | Definition Block | Assigned Agent | Delete Edit Required |
-|------|-----------------|----------------|---------------------|
-| TULRCA | b257 | Agent A (Definitions) | YES - MANDATORY |
-| TUPE | b258 | Agent A (Definitions) | YES - MANDATORY |
-
-### Other Defined Terms (Reference Only)
-| Term | Definition Block | Key Usage Blocks |
-|------|-----------------|------------------|
-| Business | b163 | b163, b201, b305, b450... |
-| Completion | b182 | b182, b350, b380, b520... |
-
-## UK Provisions to Delete/Replace
-| Block Range | Provision | Action | Singapore Equivalent Needed? |
-|-------------|-----------|--------|------------------------------|
-| b257 | TULRCA definition | DELETE | No |
-| b258 | TUPE definition | DELETE | Yes - employment provisions |
-| b762-b770 | UK Merger Control | DELETE | Yes - CCCS provisions |
-
-## Cross-Reference Map
-| Reference | Target | Block IDs |
-|-----------|--------|-----------|
-| "as defined in clause 1" | Definitions | b165, b302, b445 |
-| "pursuant to clause 5" | Completion | b520, b612 |
-
-## Document Section Map
-| Section | Block Range | Key Content |
-|---------|-------------|-------------|
-| Parties & Recitals | b001-b100 | Company names, registration |
-| Definitions | b101-b300 | All defined terms |
-| Sale Provisions | b301-b450 | Purchase price, payment |
-| Completion | b451-b600 | Completion mechanics |
-| Employees | b601-b750 | TUPE, employment terms |
-| Warranties | b751-b1000 | Seller warranties |
-| Schedules | b1001-b1337 | Property, contracts, employees |
+## Items Requiring DELETE (with assigned agent)
+| Term | Block | Assigned Agent |
+|------|-------|----------------|
+| TULRCA | b257 | Agent A |
+| TUPE | b258 | Agent A |
 ```
 
 ---
 
 ## Phase 2: Work Decomposition
 
-### Step 2.1: Plan Sub-Agent Assignments
+### Assignment Strategies
 
-Based on document structure, divide work by section:
+**Section-Based (Recommended):** Assign contiguous block ranges based on document structure.
+
+**Topic-Based:** Assign specific amendment categories across the document (e.g., "only tax provisions").
+
+### Example Assignments
 
 ```markdown
-## Sub-Agent Assignments
-
-### Agent A: Definitions & Parties (b001-b300)
-- Review all defined terms
-- Update statutory references
-- Change jurisdiction terms
+### Agent A: Definitions (b001-b300)
 - Output: edits-definitions.json
 
-### Agent B: Core Provisions (b301-b600)
-- Sale and Completion clauses
-- Payment and price adjustments
-- Tax provisions (VAT → GST)
+### Agent B: Core Provisions (b301-b600)  
 - Output: edits-provisions.json
 
-### Agent C: Employees & Warranties (b601-b1000)
-- TUPE provisions (delete + insert SG equivalent)
-- Employment warranties
-- General warranties
+### Agent C: Warranties & Schedules (b601-b900)
 - Output: edits-warranties.json
-
-### Agent D: Schedules (b1001-b1337)
-- Property schedules
-- Contract schedules
-- Employee schedules
-- Output: edits-schedules.json
 ```
-
-### Step 2.2: Determine Assignment Strategy
-
-**Option A: Section-Based (Recommended)**
-- Assign contiguous block ranges based on document structure
-- Best for: Documents with clear section boundaries
-- Benefit: Sub-agents have full context for their section
-
-**Option B: Topic-Based**
-- Assign specific amendment categories across the document
-- Best for: Targeted reviews (e.g., "only update tax provisions")
-- Benefit: Deep expertise on specific issues
 
 ---
 
 ## Phase 3: Spawn Sub-Agents
 
-Use the Claude Code Task tool to spawn sub-agents. Each sub-agent receives:
-1. The Context Document (shared global context)
-2. Their assigned block range
-3. Specific instructions for their section
+Each sub-agent receives:
+1. The **Context Document** (global context)
+2. Their **assigned block range**
+3. **Specific instructions**
 
 ### Sub-Agent Prompt Template
 
 ```markdown
-You are a contract review sub-agent. Your task is to review a specific section of a legal contract and produce an edits.json file.
+You are a contract review sub-agent.
 
 ## Your Assignment
 - **Block Range**: b[START] to b[END]
@@ -260,735 +135,160 @@ You are a contract review sub-agent. Your task is to review a specific section o
 - **Output File**: edits-[section].json
 
 ## Context Document
-[PASTE FULL CONTEXT DOCUMENT HERE]
+[PASTE FULL CONTEXT DOCUMENT]
 
 ## Instructions
-1. Read your assigned chunks using:
+1. Read your assigned chunks:
    ```bash
-   cd /path/to/superdoc-redlines
    node superdoc-redline.mjs read --input contract.docx --chunk [N] --max-tokens 10000
    ```
 
-2. For each block in your range, assess whether amendments are needed based on:
-   - The review instructions in the Context Document
-   - The defined terms changes (e.g., VAT→GST)
-   - UK-specific provisions that need deletion or replacement
+2. For each block, assess amendments based on Context Document.
 
-3. Draft EXACT replacement text for each amendment (not vague directions)
+3. Draft EXACT replacement text (not vague directions).
 
-4. When you encounter a defined term from the Context Document:
-   - Check if it's in the "Terms to Change" table
-   - If yes, apply the change AND note it for the orchestrator
-   - If it's referenced elsewhere (per Context Document), ensure consistency
+4. Check "Items Requiring DELETE" - if any are in your range, create DELETE edits.
 
-5. **⚠️ CRITICAL: Check for UK-Specific Definitions to DELETE**
-   - Review the "UK-Specific Definitions to DELETE" table in the Context Document
-   - If ANY of these definitions fall within your block range, you MUST create a DELETE edit
-   - These definitions have NO Singapore equivalent - they must be removed entirely
-   - Example: If TULRCA (b257) is in your range, add: `{ "blockId": "b257", "operation": "delete", "comment": "UK statute - no Singapore equivalent" }`
+5. Check "Compound Defined Terms" - change these in your range.
 
-6. **⚠️ CRITICAL: Check for Compound Defined Terms**
-   - Review the "Compound Defined Terms" table in the Context Document
-   - If ANY compound terms fall within your block range, you MUST change them
-   - Example: "VAT Records" must become "GST Records"
-   - This is a REPLACEMENT, not just updating the base term
+6. Create edits file (markdown or JSON format).
 
-7. Create your edits file in **Markdown format** (preferred for reliability):
-   ```markdown
-   ## Edits for [SECTION] (b[START]-b[END])
-
-   ## Metadata
-   - **Version**: 0.2.0
-   - **Author Name**: [YOUR_AGENT_ID]
-
-   ## Edits Table
-
-   | Block | Op | Diff | Comment |
-   |-------|-----|------|---------|
-   | b[XXX] | replace | true | [RATIONALE] |
-   | b[YYY] | delete | - | [RATIONALE] |
-
-   ## Replacement Text
-
-   ### b[XXX] newText
-   [EXACT REPLACEMENT TEXT]
-   ```
-
-8. **Before finalizing**, create a verification checklist for your block range:
-   ```markdown
-   ## Pre-Generation Checklist (b[START]-b[END])
-
-   ### Deletions in my range:
-   - [ ] b[XXX] - [term] (UK definition, no SG equivalent)
-
-   ### Compound terms in my range:
-   - [ ] b[XXX] - [term] → [new term]
-
-   ### Other changes in my range:
-   - [ ] b[XXX] - [description]
-
-   **All items checked before generating edits.**
-   ```
-
-9. Save your edits file to: edits-[section].md (or .json if using JSON format)
-
-## Critical Rules
-- ONLY edit blocks within your assigned range (b[START] to b[END])
-- ALWAYS draft exact replacement text, never vague directions
-- ALWAYS use diff: true for surgical edits, diff: false for complete rewrites
-- ALWAYS cite Singapore statutes with year (e.g., "Companies Act 1967")
-- When deleting UK provisions, assess whether Singapore equivalent needed
-- **MANDATORY**: Delete ALL UK-specific definitions in your range that have no Singapore equivalent
-- **MANDATORY**: Change ALL compound defined terms in your range (e.g., "VAT Records" → "GST Records")
+7. Before finalizing, verify:
+   - [ ] All DELETEs in my range created
+   - [ ] All compound terms in my range changed
+   - [ ] All term usages in my range updated
 
 ## Output
-When complete, report:
-1. Number of edits made
-2. **Pre-generation checklist** (show completed checklist)
-3. **UK definitions deleted** (list block IDs)
-4. **Compound terms changed** (list block IDs)
-5. Any cross-reference issues found
-6. Any terms that need orchestrator attention
+Report: edit count, deletions made, compound terms changed, any issues.
 ```
 
-### Spawning with Task Tool
+### Spawning in Parallel
 
 ```javascript
-// Spawn sub-agents in parallel using Task tool
-// Each agent works independently on their assigned section
-
-// Agent A: Definitions
-Task({
-  subagent_type: "general-purpose",
-  prompt: `[SUB-AGENT PROMPT with block range b001-b300]`,
-  description: "Review definitions section"
-});
-
-// Agent B: Core Provisions
-Task({
-  subagent_type: "general-purpose",
-  prompt: `[SUB-AGENT PROMPT with block range b301-b600]`,
-  description: "Review core provisions"
-});
-
-// Agent C: Warranties
-Task({
-  subagent_type: "general-purpose",
-  prompt: `[SUB-AGENT PROMPT with block range b601-b1000]`,
-  description: "Review warranties section"
-});
-
-// Agent D: Schedules
-Task({
-  subagent_type: "general-purpose",
-  prompt: `[SUB-AGENT PROMPT with block range b1001-b1337]`,
-  description: "Review schedules section"
-});
+Promise.all([
+  Task({ prompt: agentAPrompt, description: "Definitions" }),
+  Task({ prompt: agentBPrompt, description: "Provisions" }),
+  Task({ prompt: agentCPrompt, description: "Warranties" })
+]);
 ```
 
 ---
 
-## Phase 4: Sub-Agent Execution
+## Phase 4: Merge & Validate
 
-Each sub-agent independently:
-
-### Step 4.1: Read Assigned Chunks
+### Step 4.1: Collect Edit Files
 
 ```bash
-# Sub-agent reads only their relevant chunks
-node superdoc-redline.mjs read --input contract.docx --chunk [N] --max-tokens 10000
+ls edits-*.json
 ```
 
-### Step 4.2: Analyze and Draft Amendments
-
-For each block in their range:
-1. Check against Context Document for required changes
-2. Draft exact replacement text
-3. Add appropriate comments
-
-### Step 4.3: Produce Edits File
-
-**⚠️ Sub-agents should use Markdown format for reliability.**
-
-For large edit sets, markdown format prevents content omission during generation:
-
-```markdown
-## Edits for Definitions Section (b001-b300)
-
-## Metadata
-- **Version**: 0.2.0
-- **Author Name**: Definitions Agent
-
-## Edits Table
-
-| Block | Op | Diff | Comment |
-|-------|-----|------|---------|
-| b165 | replace | true | Jurisdiction: UK → Singapore |
-| b180 | replace | true | Statutory: UK Companies Acts → Singapore |
-| b257 | delete | - | UK statute - no Singapore equivalent |
-| b258 | delete | - | UK statute - no Singapore equivalent |
-| b259 | replace | true | Tax: VAT definition → GST |
-
-## Replacement Text
-
-### b165 newText
-Business Day: a day other than a Saturday, Sunday or public holiday in Singapore when banks in Singapore are open for business.
-
-### b180 newText
-Companies Act: the Companies Act 1967 of Singapore.
-
-### b259 newText
-GST: Goods and Services Tax chargeable under the Goods and Services Tax Act 1993.
-```
-
-The orchestrator converts markdown to JSON during merge:
-```bash
-node superdoc-redline.mjs parse-edits -i edits-definitions.md -o edits-definitions.json
-```
-
-**Alternative: JSON format** (for smaller edit sets <20 edits)
-
-Each sub-agent outputs a properly formatted edits.json:
-
-```json
-{
-  "version": "0.2.0",
-  "agent": "definitions-agent",
-  "blockRange": { "start": "b001", "end": "b300" },
-  "edits": [
-    {
-      "blockId": "b165",
-      "operation": "replace",
-      "newText": "Business Day: a day other than a Saturday, Sunday or public holiday in Singapore when banks in Singapore are open for business.",
-      "comment": "Jurisdiction: UK → Singapore",
-      "diff": true
-    },
-    {
-      "blockId": "b180",
-      "operation": "replace",
-      "newText": "Companies Act: the Companies Act 1967 of Singapore.",
-      "comment": "Statutory: UK Companies Acts → Singapore Companies Act (cited with year)",
-      "diff": true
-    },
-    {
-      "blockId": "b259",
-      "operation": "replace",
-      "newText": "GST: Goods and Services Tax chargeable under the Goods and Services Tax Act 1993.",
-      "comment": "Tax: VAT definition → GST definition. NOTE: Term used in blocks b395, b396, b450, b512, b678, b890 (per Context Document)",
-      "diff": true
-    }
-  ]
-}
-```
-
----
-
-## Phase 5: Orchestrator Merge & Validation
-
-### Step 5.1: Collect All Edit Files
-
-Wait for all sub-agents to complete and verify their output files exist:
-
-```bash
-ls -la edits-*.json
-# edits-definitions.json
-# edits-provisions.json
-# edits-warranties.json
-# edits-schedules.json
-```
-
-### Step 5.2: Merge Edit Files
+### Step 4.2: Merge
 
 ```bash
 node superdoc-redline.mjs merge \
-  edits-definitions.json \
-  edits-provisions.json \
-  edits-warranties.json \
-  edits-schedules.json \
+  edits-definitions.json edits-provisions.json edits-warranties.json \
   -o merged-edits.json \
   -c combine \
   -v contract.docx
 ```
 
-**Conflict Strategies:**
-| Strategy | Use When |
-|----------|----------|
-| `error` | Sub-agents should never edit same blocks (strict boundaries) |
-| `first` | Earlier sections take precedence |
-| `last` | Later sections take precedence |
-| `combine` | Merge comments, use first for operations (recommended) |
+**Conflict strategies:** `error` (strict), `first`, `last`, `combine` (recommended).
 
-### Step 5.3: Validate Merged Edits
+### Step 4.3: Pre-Apply Verification
+
+- [ ] Every DELETE in Context Document has an edit
+- [ ] Every compound term has an edit  
+- [ ] No residual terms in newText fields
+
+### Step 4.4: Validate & Apply
 
 ```bash
 node superdoc-redline.mjs validate --input contract.docx --edits merged-edits.json
+node superdoc-redline.mjs apply -i contract.docx -o amended.docx -e merged-edits.json
 ```
 
-**Check for:**
-- All block IDs exist in document
-- No conflicting edits on same block
-- Edit operations are valid
+### Step 4.5: Recompress Output File
 
-### Step 5.4: Cross-Reference Validation
-
-The orchestrator must verify:
-
-1. **Defined Term Consistency**
-   - Every term in "Terms to Change" was amended in its definition block
-   - All usage locations (from Context Document) were also amended
-
-2. **Delete-and-Insert Completeness**
-   - Every deleted UK provision has corresponding Singapore insertion (if required)
-
-3. **Cross-Reference Integrity**
-   - No broken clause number references
-   - All "as defined in" references still valid
-
-### Step 5.5: Pre-Apply Verification (MANDATORY)
-
-**⚠️ Before applying, verify coverage against the Context Document:**
-
-```markdown
-## Pre-Apply Verification Checklist
-
-### 1. UK Definitions DELETE Verification
-| Term | Block ID | Delete Edit in Merged File? |
-|------|----------|-----------------------------|
-| TULRCA | b257 | [ ] |
-| TUPE | b258 | [ ] |
-
-### 2. Compound Terms Verification
-| Compound Term | Block ID | Edit Exists? | New Text Correct? |
-|---------------|----------|--------------|-------------------|
-| VAT Records | b263 | [ ] | GST Records |
-| VAT Returns | b264 | [ ] | GST Returns |
-
-### 3. Residual UK Terms Check
-Search the merged edits for any newText containing UK terms:
-- [ ] No "TULRCA" in any newText
-- [ ] No "TUPE" in any newText
-- [ ] No "VAT Records" (should be "GST Records")
-- [ ] No "HMRC" (should be "IRAS")
-```
-
-**If any check fails:** Create additional edits and re-merge before applying.
-
-### Step 5.6: Apply Merged Edits
-
-```bash
-node superdoc-redline.mjs apply \
-  --input contract.docx \
-  --output contract-amended.docx \
-  --edits merged-edits.json \
-  --author-name "AI Legal Counsel"
-```
+**⚠️ SuperDoc writes uncompressed DOCX files (~6x larger).** See CONTRACT-REVIEW-SKILL.md "Step 5: Recompress Output File" for the recompression script.
 
 ---
 
-## Complete Orchestrator Workflow
-
-```markdown
 ## Orchestrator Checklist
 
+```markdown
 ### Phase 1: Discovery
-- [ ] Get document statistics
-- [ ] Extract full IR
-- [ ] Read ALL chunks (discovery mode)
-- [ ] **DEFINITIONS AUDIT (CRITICAL):**
-  - [ ] Every definition in the Definitions section reviewed
-  - [ ] UK-specific definitions flagged for DELETE with block IDs
-  - [ ] Compound defined terms identified (e.g., "VAT Records")
-- [ ] Build Context Document with:
-  - [ ] All defined terms and usage locations
-  - [ ] **Compound Defined Terms table** (MANDATORY)
-  - [ ] **UK-Specific Definitions to DELETE table** (MANDATORY)
-  - [ ] All UK provisions to change
-  - [ ] Cross-reference map
-  - [ ] Section map with block ranges
+- [ ] Get stats, extract IR
+- [ ] Read ALL chunks
+- [ ] Build Context Document with sub-agent assignments
+- [ ] Identify all DELETEs and assign to agents
 
-### Phase 2: Work Decomposition
-- [ ] Plan sub-agent assignments
-- [ ] Define block ranges for each agent
-- [ ] **Assign UK definitions to correct agent** (verify which agent owns each DELETE)
-- [ ] Prepare sub-agent prompts with Context Document
+### Phase 2: Decomposition
+- [ ] Define block ranges (non-overlapping)
+- [ ] Prepare sub-agent prompts
 
-### Phase 3: Spawn Sub-Agents
+### Phase 3: Spawn
 - [ ] Launch all sub-agents in parallel
-- [ ] Each agent has: Context Document + block range + instructions
-- [ ] Each agent knows which UK definitions they must DELETE
+- [ ] Each has Context Document + block range
 
-### Phase 4: Monitor & Collect
-- [ ] Wait for all sub-agents to complete
-- [ ] Collect edit files from each agent
-- [ ] Review agent reports for issues
-- [ ] **Verify each agent reported their UK definition deletions**
-- [ ] **Verify each agent reported their compound term changes**
+### Phase 4: Collect
+- [ ] Wait for all agents
+- [ ] Verify each reported their DELETEs and compound terms
 
-### Phase 5: Merge & Validate
-- [ ] Merge all edit files
-- [ ] Validate merged edits against document
-- [ ] **PRE-APPLY VERIFICATION (MANDATORY):**
-  - [ ] Every UK definition in Context Document has a DELETE edit
-  - [ ] Every compound term in Context Document has a REPLACE edit
-  - [ ] No residual UK terms in any newText fields
-- [ ] Cross-reference validation:
-  - [ ] All defined term usages updated
-  - [ ] All delete-and-insert pairs complete
-  - [ ] No broken cross-references
-- [ ] Apply merged edits
-- [ ] Verify output document opens correctly
-
-### Phase 6: Post-Apply Verification
-- [ ] Search output document for residual UK terms
-- [ ] If found: create additional edits and re-apply
-
-### Completion
-- [ ] Report total edits applied
-- [ ] **Report UK definitions deleted**
-- [ ] **Report compound terms changed**
-- [ ] List any unresolved issues
-- [ ] Provide output file path
+### Phase 5: Merge & Apply
+- [ ] Merge all edits
+- [ ] Pre-apply verification
+- [ ] Validate
+- [ ] Apply
+- [ ] Recompress output file (SuperDoc writes uncompressed)
+- [ ] Post-apply verification
 ```
 
 ---
 
-## Global Constraints Enforcement
+## Global Constraints
 
-Sub-agents work independently but must respect global constraints:
+Sub-agents must respect constraints from the Context Document:
 
-### 1. Defined Terms Consistency
-
-The Context Document lists ALL blocks where each defined term appears. Sub-agents must:
-- Check if any "Terms to Change" fall in their block range
-- Apply the change if so
-- Note in their edit comment that other agents need to handle other occurrences
-
-### 2. Singapore Statutory Citation Format
-
-All agents must use the same citation format:
-- **CORRECT**: "Companies Act 1967", "Employment Act 1968"
-- **WRONG**: "Companies Act (Cap. 50)", "Employment Act (Cap. 91)"
-
-### 3. Delete-and-Insert Principle
-
-When any agent deletes a UK provision, they must:
-1. Assess if Singapore equivalent needed
-2. If yes, include the insertion in their edits
-3. If uncertain, add a comment for orchestrator review
-
-### 4. Cross-Reference Preservation
-
-Agents must not delete or renumber clauses without noting the impact on cross-references in the Context Document.
+1. **Defined Terms Consistency** - Apply changes from "Terms to Change" table
+2. **Citation Format** - Use consistent format (e.g., Singapore statutes by year)
+3. **Delete-and-Insert** - When deleting, assess if insertion needed
+4. **Cross-Reference Preservation** - Don't break clause references
 
 ---
 
 ## Error Handling
 
-### Sub-Agent Timeout/Failure
-
-If a sub-agent fails:
-1. Check the last chunk it processed
-2. Re-spawn with the remaining block range
-3. Or: Orchestrator processes that section directly
-
-### Merge Conflicts
-
-If merge reports conflicts on same block:
-1. Review both edits
-2. Determine which is correct (usually the one matching Context Document)
-3. Re-run merge with appropriate conflict strategy
-
-### Validation Failures
-
-If validation fails:
-1. Identify problematic edits (invalid blockId, etc.)
-2. Remove or fix those edits
-3. Re-validate
+| Issue | Resolution |
+|-------|------------|
+| Sub-agent timeout | Re-spawn with remaining range, or orchestrator processes directly |
+| Merge conflict | Review both edits, use appropriate conflict strategy |
+| Validation failure | Fix problematic edits (invalid blockId, etc.), re-validate |
 
 ---
 
-## Performance Optimization
+## Performance Tips
 
-### Parallel Execution
-
-Spawn ALL sub-agents simultaneously:
-
-```javascript
-// GOOD: All agents start at once
-Promise.all([
-  Task({ prompt: agentAPrompt, subagent_type: "general-purpose" }),
-  Task({ prompt: agentBPrompt, subagent_type: "general-purpose" }),
-  Task({ prompt: agentCPrompt, subagent_type: "general-purpose" }),
-  Task({ prompt: agentDPrompt, subagent_type: "general-purpose" })
-]);
-
-// BAD: Sequential execution (slow)
-await Task({ prompt: agentAPrompt });
-await Task({ prompt: agentBPrompt });
-// ...
-```
-
-### Chunk Size Tuning
-
-| Scenario | Recommended Chunk Size |
-|----------|------------------------|
-| Fast overview | 50,000 tokens |
-| Standard review | 10,000 tokens |
-| Deep analysis | 5,000 tokens |
-
-Sub-agents should use smaller chunks (10K) for thorough review.
+- Spawn ALL sub-agents simultaneously (parallel, not sequential)
+- Use 10K token chunks for thorough review
+- Markdown format for large edit sets (more reliable than JSON)
 
 ---
 
-## Example: Full Orchestrator Session
+## Session Learnings
 
-```markdown
-# Contract Review Session: Singapore BTA
+### 4 February 2026 - Asset Purchase Agreement
 
-## 1. Discovery Phase
+**Key insight:** The single-agent approach worked well for this 143K token document. Sub-agents would help for documents >200K tokens or when multiple reviewers need to work in parallel.
 
-### Document Stats
-```bash
-node superdoc-redline.mjs read --input bta.docx --stats-only
-```
-Result: 1,337 blocks, 143K tokens, 15 chunks
-
-### Context Document Built
-- 47 defined terms identified
-- 12 UK-specific provisions found
-- 23 cross-references mapped
-
-## 2. Work Decomposition
-
-| Agent | Block Range | Section | Est. Edits |
-|-------|-------------|---------|------------|
-| A | b001-b300 | Definitions | ~30 |
-| B | b301-b600 | Provisions | ~15 |
-| C | b601-b1000 | Warranties | ~25 |
-| D | b1001-b1337 | Schedules | ~10 |
-
-## 3. Sub-Agents Spawned
-- 4 agents launched in parallel
-- Each received full Context Document
-- Each has clear block range boundaries
-
-## 4. Results Collected
-- Agent A: 28 edits (edits-definitions.json)
-- Agent B: 12 edits (edits-provisions.json)
-- Agent C: 31 edits (edits-warranties.json)
-- Agent D: 9 edits (edits-schedules.json)
-
-## 5. Merge & Apply
-```bash
-node superdoc-redline.mjs merge \
-  edits-definitions.json edits-provisions.json \
-  edits-warranties.json edits-schedules.json \
-  -o merged-edits.json -c combine -v bta.docx
-
-node superdoc-redline.mjs apply \
-  -i bta.docx -o bta-amended.docx -e merged-edits.json
-```
-
-## Results
-- Total edits: 80
-- Conflicts: 0
-- Validation: PASSED
-- Output: bta-amended.docx
-```
+**Shared learnings** (edit format, block ID confusion, etc.) documented in CONTRACT-REVIEW-SKILL.md.
 
 ---
 
-## Summary: Orchestrator Responsibilities
+## Reference
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  1. DISCOVERY: Read entire document, build Context Document         │
-│     - All defined terms and their locations                         │
-│     - All UK provisions needing change                              │
-│     - Cross-reference map                                           │
-├─────────────────────────────────────────────────────────────────────┤
-│  2. DECOMPOSITION: Plan work for sub-agents                         │
-│     - Assign non-overlapping block ranges                           │
-│     - Prepare Context Document for each agent                       │
-├─────────────────────────────────────────────────────────────────────┤
-│  3. COORDINATION: Spawn and monitor sub-agents                      │
-│     - Launch all agents in parallel                                 │
-│     - Collect results when complete                                 │
-├─────────────────────────────────────────────────────────────────────┤
-│  4. VALIDATION: Ensure global consistency                           │
-│     - Merge all edits                                               │
-│     - Verify defined term consistency across agents                 │
-│     - Verify delete-and-insert completeness                         │
-│     - Check cross-reference integrity                               │
-├─────────────────────────────────────────────────────────────────────┤
-│  5. EXECUTION: Apply and deliver                                    │
-│     - Apply merged edits                                            │
-│     - Verify output document                                        │
-│     - Report results to user                                        │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Learnings & Best Practices
-
-This section captures learnings from real-world usage of this skill. It should be updated after each significant review session.
-
-### Edit File Format (Critical)
-
-**⚠️ COMMON ERROR: Using incorrect edit format fields**
-
-The superdoc-redlines library v0.2.0 uses a specific format. Validation will fail if you use the wrong fields.
-
-| WRONG (will fail validation) | CORRECT (use this) |
-|------------------------------|-------------------|
-| `"type": "replace"` | `"operation": "replace"` |
-| `"search": "old text", "replace": "new text"` | `"newText": "complete new text"` |
-| `"text": "new text"` (for replace) | `"newText": "new text"` |
-
-**Correct edit structure:**
-```json
-{
-  "blockId": "b149",
-  "operation": "replace",
-  "newText": "[FULL REPLACEMENT TEXT]",
-  "diff": true,
-  "comment": "Explanation of change"
-}
-```
-
-**NOT this (common mistake):**
-```json
-{
-  "blockId": "b149",
-  "type": "replace",
-  "search": "old text here",
-  "replace": "new text here"
-}
-```
-
-### Singapore-Specific Learnings
-
-#### TUPE Has No Singapore Equivalent
-
-**Critical insight**: Singapore does not have automatic transfer of employment legislation equivalent to UK TUPE (Transfer of Undertakings (Protection of Employment) Regulations 2006).
-
-**Approach for TUPE provisions:**
-1. DELETE the TUPE definition block entirely
-2. DELETE any TUPE-related operative clauses
-3. RESTRUCTURE employee transfer provisions to use offer-and-acceptance model:
-   - Seller terminates employees at Completion
-   - Buyer offers employment to Transferring Employees on substantially similar terms
-   - No automatic transfer - employees must accept new offers
-4. Retain any employee list schedules but update headings
-
-#### Singapore Statute Citation Format
-
-**ALWAYS cite Singapore legislation by YEAR OF ENACTMENT, not chapter number.**
-
-| Wrong | Correct |
-|-------|---------|
-| Companies Act (Cap. 50) | Companies Act 1967 |
-| Employment Act (Cap. 91) | Employment Act 1968 |
-| PDPA (Cap. 26) | Personal Data Protection Act 2012 |
-
-**Full mapping of common UK → Singapore statutes:**
-
-| UK Statute | Singapore Statute | Year |
-|------------|-------------------|------|
-| Companies Act 2006 | Companies Act | 1967 |
-| Employment Rights Act 1996 | Employment Act | 1968 |
-| Data Protection Act 2018 / UK GDPR | Personal Data Protection Act (PDPA) | 2012 |
-| Insolvency Act 1986 | Insolvency, Restructuring and Dissolution Act (IRDA) | 2018 |
-| Bribery Act 2010 | Prevention of Corruption Act (PCA) | 1960 |
-| Competition Act 1998 | Competition Act | 2004 |
-| Consumer Rights Act 2015 | Consumer Protection (Fair Trading) Act | 2003 |
-| Contracts (Rights of Third Parties) Act 1999 | Contracts (Rights of Third Parties) Act | 2001 |
-| Copyright, Designs and Patents Act 1988 | Copyright Act | 2021 |
-| Value Added Tax Act 1994 | Goods and Services Tax Act | 1993 |
-
-**Professional Bodies Mapping:**
-
-| UK Body | Singapore Equivalent |
-|---------|---------------------|
-| ICAEW (Institute of Chartered Accountants in England and Wales) | ISCA (Institute of Singapore Chartered Accountants) |
-| Institute and Faculty of Actuaries | Singapore Actuarial Society |
-| Law Society of England and Wales | Law Society of Singapore |
-
-### Validation Workflow
-
-**ALWAYS validate edits before applying.**
-
-```bash
-# Step 1: Validate (catches format errors before they corrupt the document)
-node superdoc-redline.mjs validate --input contract.docx --edits edits.json
-
-# Step 2: Only if validation passes, apply
-node superdoc-redline.mjs apply --input contract.docx --output amended.docx --edits edits.json
-```
-
-Validation catches:
-- Invalid block IDs (block doesn't exist in document)
-- Malformed edit operations
-- Wrong field names (e.g., `type` instead of `operation`)
-- Missing required fields
-
----
-
-## Continuous Learning Process
-
-After each contract review session, the orchestrator (or human) should:
-
-### 1. Document New Learnings
-
-Create or update a learnings entry:
-
-```markdown
-### Session: [Date] - [Contract Type] - [Jurisdiction Conversion]
-
-**What worked well:**
-- [List successful approaches]
-
-**What failed/required correction:**
-- [List errors and their fixes]
-
-**New mappings discovered:**
-- [UK term/statute] → [Singapore equivalent]
-
-**Edit format issues encountered:**
-- [Any format validation failures and fixes]
-```
-
-### 2. Update This Skill Document
-
-Add any new learnings to the appropriate sections:
-- New jurisdiction mappings → "Singapore-Specific Learnings" section
-- Format issues → "Edit File Format" section
-- Workflow improvements → "Complete Orchestrator Workflow" section
-
-### 3. Create Jurisdiction-Specific Reference Files
-
-For frequently used conversions, create reference files:
-
-```
-/reference/uk-to-singapore.md
-/reference/uk-to-hong-kong.md
-/reference/uk-to-australia.md
-```
-
-Each containing:
-- Statute mapping table
-- Regulatory body mapping
-- Tax terminology mapping
-- Employment law differences
-- Professional body mapping
-
-### 4. Update Prompts Based on Errors
-
-If sub-agents consistently make the same error:
-1. Identify the root cause
-2. Add explicit guidance to the sub-agent prompt template
-3. Add a "Common Pitfalls" warning in the relevant section
+- **Core methodology:** CONTRACT-REVIEW-SKILL.md
+- **Edit format:** See "Edit File Format Reference" in CONTRACT-REVIEW-SKILL.md
+- **Jurisdiction mappings:** reference/uk-to-singapore.md
 
 ---
 
