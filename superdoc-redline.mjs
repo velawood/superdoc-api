@@ -30,6 +30,21 @@ import { readDocument, getDocumentStats } from './src/documentReader.mjs';
 import { applyEdits, validateEdits } from './src/editApplicator.mjs';
 import { mergeEditFiles, validateMergedEdits } from './src/editMerge.mjs';
 
+/**
+ * Parse integer argument for Commander.js options.
+ * Commander passes (value, previousValue) to parsers, but parseInt expects (string, radix).
+ * Using parseInt directly causes bugs when a default value exists (previousValue becomes radix).
+ * @param {string} value - The CLI argument value
+ * @returns {number}
+ */
+const parseIntArg = (value) => {
+  const parsed = parseInt(value, 10);
+  if (Number.isNaN(parsed)) {
+    throw new Error(`Invalid number: ${value}`);
+  }
+  return parsed;
+};
+
 program
   .name('superdoc-redline')
   .description('Structured document operations for AI agents')
@@ -46,7 +61,7 @@ program
   .option('-o, --output <path>', 'Output JSON file (default: <input>-ir.json)')
   .option('-f, --format <type>', 'Output format: full|outline|blocks', 'full')
   .option('--no-defined-terms', 'Exclude defined terms extraction')
-  .option('--max-text <length>', 'Truncate block text to length', parseInt)
+  .option('--max-text <length>', 'Truncate block text to length', parseIntArg)
   .action(async (options) => {
     try {
       const inputPath = resolve(options.input);
@@ -89,8 +104,8 @@ program
   .command('read')
   .description('Read document for LLM consumption (with automatic chunking)')
   .requiredOption('-i, --input <path>', 'Input DOCX file')
-  .option('-c, --chunk <index>', 'Specific chunk index (0-indexed)', parseInt)
-  .option('--max-tokens <count>', 'Max tokens per chunk', parseInt, 100000)
+  .option('-c, --chunk <index>', 'Specific chunk index (0-indexed)', parseIntArg)
+  .option('--max-tokens <count>', 'Max tokens per chunk', parseIntArg, 100000)
   .option('-f, --format <type>', 'Output format: full|outline|summary', 'full')
   .option('--stats-only', 'Only show document statistics')
   .option('--no-metadata', 'Exclude block IDs and positions from output')
