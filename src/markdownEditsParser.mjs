@@ -1,0 +1,305 @@
+/**
+ * Markdown Edits Parser - Parse and generate markdown edit format.
+ *
+ * This module provides bidirectional conversion between markdown-formatted
+ * edit instructions and JSON edit structures used by the edit system.
+ *
+ * Key Features:
+ * - Parse markdown edit format into JSON edit structure
+ * - Convert JSON edits back to markdown format
+ * - Handle all operation types: delete, replace, comment, insert
+ * - Graceful error handling for malformed input
+ * - Support for partial recovery from truncated output
+ */
+
+/**
+ * @typedef {Object} Author
+ * @property {string} name - Author's name
+ * @property {string} email - Author's email
+ */
+
+/**
+ * @typedef {Object} Edit
+ * @property {string} [blockId] - Block ID for delete, replace, comment operations
+ * @property {string} [afterBlockId] - Block ID for insert operations (insert after this block)
+ * @property {'delete'|'replace'|'comment'|'insert'} operation - Operation type
+ * @property {boolean} [diff] - Word-level diff mode (for replace only)
+ * @property {string} [comment] - Rationale for edit
+ * @property {string} [newText] - Replacement text (for replace only)
+ * @property {string} [text] - Insert text (for insert only)
+ */
+
+/**
+ * @typedef {Object} ParsedEdits
+ * @property {string} version - Version string
+ * @property {Author} author - Author information
+ * @property {Edit[]} edits - Array of parsed edits
+ */
+
+/**
+ * Parse markdown edit format into JSON edit structure.
+ *
+ * @param {string} markdown - Markdown formatted edit instructions
+ * @returns {ParsedEdits} Parsed edit structure
+ */
+export function parseMarkdownEdits(markdown) {
+  const result = {
+    version: '',
+    author: { name: '', email: '' },
+    edits: []
+  };
+
+  if (!markdown || typeof markdown !== 'string') {
+    return result;
+  }
+
+  // Parse metadata section
+  const versionMatch = markdown.match(/\*\*Version\*\*:\s*(.+)/i);
+  if (versionMatch) {
+    result.version = versionMatch[1].trim();
+  }
+
+  const authorNameMatch = markdown.match(/\*\*Author Name\*\*:\s*(.+)/i);
+  if (authorNameMatch) {
+    result.author.name = authorNameMatch[1].trim();
+  }
+
+  const authorEmailMatch = markdown.match(/\*\*Author Email\*\*:\s*(.+)/i);
+  if (authorEmailMatch) {
+    result.author.email = authorEmailMatch[1].trim();
+  }
+
+  // Parse replacement/insert text sections first so we can reference them later
+  const textSections = new Map();
+  const textSectionRegex = /###\s+(b\d+)\s+(newText|insertText)\s*\n([\s\S]*?)(?=(?:\n###\s+b\d+\s+(?:newText|insertText))|$)/gi;
+  let textMatch;
+  while ((textMatch = textSectionRegex.exec(markdown)) !== null) {
+    const blockId = textMatch[1];
+    const textType = textMatch[2].toLowerCase();
+    const textContent = textMatch[3].trim();
+    textSections.set(`${blockId}_${textType}`, textContent);
+  }
+
+  // Find and parse the edits table
+  const tableMatch = markdown.match(/\|\s*Block\s*\|\s*Op\s*\|\s*Diff\s*\|\s*Comment\s*\|[\s\S]*?(?=\n##|\n###|$)/i);
+  if (!tableMatch) {
+    return result;
+  }
+
+  const tableContent = tableMatch[0];
+  const tableLines = tableContent.split('\n').filter(line => line.trim());
+
+  // Skip header and separator rows
+  let dataStartIndex = 0;
+  for (let i = 0; i < tableLines.length; i++) {
+    const line = tableLines[i].trim();
+    // Skip header row
+    if (/^\|\s*Block\s*\|/i.test(line)) {
+      dataStartIndex = i + 1;
+      continue;
+    }
+    // Skip separator row (contains dashes)
+    if (/^\|[\s\-|]+\|$/.test(line)) {
+      dataStartIndex = i + 1;
+      continue;
+    }
+  }
+
+  // Parse data rows
+  for (let i = dataStartIndex; i < tableLines.length; i++) {
+    const line = tableLines[i].trim();
+
+    // Skip empty lines or lines that don't look like table rows
+    if (!line || !line.startsWith('|')) {
+      continue;
+    }
+
+    try {
+      const edit = parseTableRow(line, textSections);
+      if (edit) {
+        result.edits.push(edit);
+      }
+    } catch (err) {
+      console.warn(`Skipping malformed row: ${line} - ${err.message}`);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Parse a single table row into an edit object.
+ *
+ * @param {string} line - Table row line
+ * @param {Map<string, string>} textSections - Map of block text sections
+ * @returns {Edit|null} Parsed edit or null if invalid
+ */
+function parseTableRow(line, textSections) {
+  // Split by | and filter empty parts
+  const parts = line.split('|').map(p => p.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1 || arr.length <= 2);
+
+  // Handle edge case where line ends with |
+  const cells = line.split('|');
+  const cleanCells = [];
+  for (let i = 1; i < cells.length; i++) {
+    if (i === cells.length - 1 && cells[i].trim() === '') {
+      continue; // Skip trailing empty cell after final |
+    }
+    cleanCells.push(cells[i].trim());
+  }
+
+  if (cleanCells.length < 2) {
+    return null;
+  }
+
+  const blockId = cleanCells[0];
+  const operation = cleanCells[1]?.toLowerCase();
+  const diffValue = cleanCells[2] || '-';
+  const comment = cleanCells[3] || '';
+
+  // Validate block ID format
+  if (!blockId || !/^b\d+$/i.test(blockId)) {
+    console.warn(`Invalid block ID: ${blockId}`);
+    return null;
+  }
+
+  // Validate operation
+  const validOps = ['delete', 'replace', 'comment', 'insert'];
+  if (!operation || !validOps.includes(operation)) {
+    console.warn(`Invalid operation: ${operation}`);
+    return null;
+  }
+
+  const edit = {
+    operation
+  };
+
+  // Handle insert operation - uses afterBlockId instead of blockId
+  if (operation === 'insert') {
+    edit.afterBlockId = blockId;
+  } else {
+    edit.blockId = blockId;
+  }
+
+  // Parse diff value for replace operations
+  if (operation === 'replace') {
+    if (diffValue.toLowerCase() === 'true') {
+      edit.diff = true;
+    } else if (diffValue.toLowerCase() === 'false') {
+      edit.diff = false;
+    }
+    // If '-' or other value, don't set diff property
+  }
+
+  // Add comment if present
+  if (comment && comment !== '-') {
+    edit.comment = comment;
+  }
+
+  // Look up associated text for replace and insert operations
+  if (operation === 'replace') {
+    const newText = textSections.get(`${blockId}_newtext`);
+    if (newText) {
+      edit.newText = newText;
+    } else {
+      console.warn(`Missing newText section for replace operation on ${blockId}`);
+    }
+  } else if (operation === 'insert') {
+    const insertText = textSections.get(`${blockId}_inserttext`);
+    if (insertText) {
+      edit.text = insertText;
+    } else {
+      console.warn(`Missing insertText section for insert operation on ${blockId}`);
+    }
+  }
+
+  return edit;
+}
+
+/**
+ * Convert JSON edits back to markdown format.
+ *
+ * @param {ParsedEdits} json - JSON edit structure
+ * @returns {string} Markdown formatted edit instructions
+ */
+export function editsToMarkdown(json) {
+  if (!json || typeof json !== 'object') {
+    return '';
+  }
+
+  const lines = [];
+
+  // Document title
+  lines.push('# Edits');
+  lines.push('');
+
+  // Metadata section
+  lines.push('## Metadata');
+  if (json.version) {
+    lines.push(`- **Version**: ${json.version}`);
+  }
+  if (json.author?.name) {
+    lines.push(`- **Author Name**: ${json.author.name}`);
+  }
+  if (json.author?.email) {
+    lines.push(`- **Author Email**: ${json.author.email}`);
+  }
+  lines.push('');
+
+  // Edits table section
+  lines.push('## Edits Table');
+  lines.push('');
+  lines.push('| Block | Op | Diff | Comment |');
+  lines.push('|-------|-----|------|---------|');
+
+  const edits = json.edits || [];
+  const textSections = [];
+
+  for (const edit of edits) {
+    const blockId = edit.blockId || edit.afterBlockId || '';
+    const operation = edit.operation || '';
+
+    // Determine diff value
+    let diffValue = '-';
+    if (operation === 'replace') {
+      if (edit.diff === true) {
+        diffValue = 'true';
+      } else if (edit.diff === false) {
+        diffValue = 'false';
+      }
+    }
+
+    const comment = edit.comment || '-';
+
+    lines.push(`| ${blockId} | ${operation} | ${diffValue} | ${comment} |`);
+
+    // Collect text sections for later
+    if (operation === 'replace' && edit.newText) {
+      textSections.push({
+        blockId,
+        type: 'newText',
+        content: edit.newText
+      });
+    } else if (operation === 'insert' && edit.text) {
+      textSections.push({
+        blockId,
+        type: 'insertText',
+        content: edit.text
+      });
+    }
+  }
+
+  // Add replacement/insert text sections
+  if (textSections.length > 0) {
+    lines.push('');
+    lines.push('## Replacement Text');
+
+    for (const section of textSections) {
+      lines.push('');
+      lines.push(`### ${section.blockId} ${section.type}`);
+      lines.push(section.content);
+    }
+  }
+
+  return lines.join('\n');
+}

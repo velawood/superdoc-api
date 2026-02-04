@@ -157,6 +157,149 @@ node superdoc-redline.mjs merge edits-*.json -o merged.json -v doc.docx
 - `last` - Keep last edit (by file order)
 - `combine` - Merge comments; use `first` for other operations
 
+### `parse-edits`
+
+Convert markdown edits to JSON format. This enables a more resilient edit format that is easier for LLMs to generate without syntax errors.
+
+```bash
+node superdoc-redline.mjs parse-edits -i edits.md -o edits.json
+node superdoc-redline.mjs parse-edits -i edits.md -o edits.json --validate doc.docx
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-i, --input <file>` | Input markdown file (.md) (required) |
+| `-o, --output <file>` | Output JSON file (.json) (required) |
+| `--validate <docx>` | Validate block IDs against document |
+
+### `to-markdown`
+
+Convert JSON edits to markdown format for human review or editing.
+
+```bash
+node superdoc-redline.mjs to-markdown -i edits.json -o edits.md
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-i, --input <file>` | Input JSON file (.json) (required) |
+| `-o, --output <file>` | Output markdown file (.md) (required) |
+
+---
+
+## Markdown Edit Format (Recommended for LLMs)
+
+For large edit sets, the markdown format is more reliable than JSON because:
+- No syntax errors from missing commas or quotes
+- Partial output is still parseable (truncation recovery)
+- Lower cognitive load during generation
+- Human-readable for review
+
+### Markdown Format Specification
+
+```markdown
+# Edits: [Document Name]
+
+## Metadata
+- **Version**: 0.2.0
+- **Author Name**: AI Legal Counsel
+- **Author Email**: ai@counsel.sg
+
+## Edits Table
+
+| Block | Op | Diff | Comment |
+|-------|-----|------|---------|
+| b257 | delete | - | DELETE TULRCA definition |
+| b165 | replace | true | Change Business Day to Singapore |
+| b500 | comment | - | Review needed |
+| b449 | insert | - | Insert new clause |
+
+## Replacement Text
+
+### b165 newText
+Business Day: a day other than a Saturday, Sunday or public holiday in Singapore when banks in Singapore are open for business.
+
+### b449 insertText
+The Buyer shall offer employment to each Transferring Employee.
+```
+
+### Table Columns
+
+| Column | Required | Values | Description |
+|--------|----------|--------|-------------|
+| Block | Yes | `b###` | Block ID from document IR |
+| Op | Yes | `delete`, `replace`, `comment`, `insert` | Operation type |
+| Diff | For replace | `true`, `false`, `-` | Word-level diff mode |
+| Comment | No | Free text | Rationale for edit |
+
+### Text Sections
+
+- `### b### newText` - Replacement text for `replace` operations
+- `### b### insertText` - New content for `insert` operations
+
+### Usage
+
+```bash
+# Convert markdown to JSON
+node superdoc-redline.mjs parse-edits -i edits.md -o edits.json
+
+# Apply directly from markdown (auto-detects format)
+node superdoc-redline.mjs apply -i doc.docx -o out.docx -e edits.md
+
+# Convert existing JSON to markdown for review
+node superdoc-redline.mjs to-markdown -i edits.json -o edits.md
+```
+
+---
+
+## Track Changes
+
+**Track changes is enabled by default.** All edits appear as native Word revisions when you open the output file in Microsoft Word:
+
+- **Insertions** - Shown as underlined additions
+- **Deletions** - Shown as strikethrough removals
+- **Changes attributed** to the author you specify (default: "AI Assistant")
+
+### Default Behavior
+
+```bash
+# Track changes ON by default
+node superdoc-redline.mjs apply -i doc.docx -o redlined.docx -e edits.json
+```
+
+### Custom Author Attribution
+
+```bash
+node superdoc-redline.mjs apply -i doc.docx -o redlined.docx -e edits.json \
+  --author-name "Legal Review Bot" \
+  --author-email "review@firm.com"
+```
+
+### Disable Track Changes
+
+For direct edits without revision marks:
+
+```bash
+node superdoc-redline.mjs apply -i doc.docx -o out.docx -e edits.json --no-track-changes
+```
+
+### Word-Level Diff
+
+By default, `replace` operations use word-level diff to produce **minimal tracked changes**. Only the words that actually changed are marked as insertions/deletions, not the entire block.
+
+To replace the entire block content (useful for complete rewrites):
+
+```json
+{
+  "blockId": "b025",
+  "operation": "replace",
+  "newText": "Completely new text here",
+  "diff": false
+}
+```
+
 ---
 
 ## Edit Format (v0.2.0)

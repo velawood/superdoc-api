@@ -198,6 +198,65 @@ Conflict strategies:
 }
 ```
 
+## Track Changes
+
+**Track changes is ON by default.** Output files open in Microsoft Word with all edits visible as revisions.
+
+| What You See | Meaning |
+|--------------|---------|
+| Underlined text | Insertion |
+| ~~Strikethrough text~~ | Deletion |
+| Author name in margin | Who made the change |
+
+### Customize Author
+
+```bash
+node superdoc-redline.mjs apply -i doc.docx -o out.docx -e edits.json \
+  --author-name "AI Counsel" \
+  --author-email "ai@firm.com"
+```
+
+### Disable Track Changes
+
+For direct edits (no revision marks):
+
+```bash
+node superdoc-redline.mjs apply -i doc.docx -o out.docx -e edits.json --no-track-changes
+```
+
+### Word-Level Diff
+
+`replace` operations use word-level diff by default - only changed words are marked, not the entire block. Set `"diff": false` in an edit to replace the whole block.
+
+## Markdown Edit Format (Recommended)
+
+For large edit sets, use markdown format instead of JSON - it's more resilient to generation errors:
+
+```markdown
+## Edits Table
+
+| Block | Op | Diff | Comment |
+|-------|-----|------|---------|
+| b257 | delete | - | DELETE TULRCA |
+| b165 | replace | true | Change to Singapore |
+
+### b165 newText
+Business Day: a day in Singapore when banks are open.
+```
+
+**Advantages over JSON:**
+- No syntax errors from missing commas
+- Partial output still parseable
+- Human-readable for review
+
+```bash
+# Convert markdown to JSON
+node superdoc-redline.mjs parse-edits -i edits.md -o edits.json
+
+# Apply directly from markdown (auto-detects)
+node superdoc-redline.mjs apply -i doc.docx -o out.docx -e edits.md
+```
+
 ## CLI Quick Reference
 
 | Command | Purpose |
@@ -208,7 +267,10 @@ Conflict strategies:
 | `read -i doc.docx --chunk N` | Read specific chunk |
 | `validate -i doc.docx -e edits.json` | Validate edits |
 | `apply -i doc.docx -o out.docx -e edits.json` | Apply with track changes |
+| `apply -i doc.docx -o out.docx -e edits.md` | Apply from markdown |
 | `merge a.json b.json -o merged.json` | Merge agent edits |
+| `parse-edits -i edits.md -o edits.json` | Convert markdown to JSON |
+| `to-markdown -i edits.json -o edits.md` | Convert JSON to markdown |
 
 ## Requirements
 

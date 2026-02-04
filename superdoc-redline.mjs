@@ -29,6 +29,7 @@ import { extractDocumentIR } from './src/irExtractor.mjs';
 import { readDocument, getDocumentStats } from './src/documentReader.mjs';
 import { applyEdits, validateEdits } from './src/editApplicator.mjs';
 import { mergeEditFiles, validateMergedEdits } from './src/editMerge.mjs';
+import { parseMarkdownEdits, editsToMarkdown } from './src/markdownEditsParser.mjs';
 
 /**
  * Parse integer argument for Commander.js options.
@@ -192,8 +193,15 @@ program
       const outputPath = resolve(options.output);
       const editsPath = resolve(options.edits);
 
-      const editsJson = await readFile(editsPath, 'utf-8');
-      const editConfig = JSON.parse(editsJson);
+      // Auto-detect format by extension
+      let editConfig;
+      if (options.edits.endsWith('.md')) {
+        const markdown = await readFile(editsPath, 'utf-8');
+        editConfig = parseMarkdownEdits(markdown);
+      } else {
+        const editsJson = await readFile(editsPath, 'utf-8');
+        editConfig = JSON.parse(editsJson);
+      }
 
       console.log(`Loading document: ${inputPath}`);
       console.log(`Applying ${editConfig.edits.length} edit(s)...`);
@@ -294,6 +302,89 @@ program
 
         console.log('Validation: PASSED');
       }
+
+    } catch (error) {
+      console.error('Error:', error.message);
+      process.exit(1);
+    }
+  });
+
+// ============================================================================
+// Command: parse-edits
+// ============================================================================
+
+program
+  .command('parse-edits')
+  .description('Convert markdown edits to JSON format')
+  .requiredOption('-i, --input <file>', 'Input markdown file (.md)')
+  .requiredOption('-o, --output <file>', 'Output JSON file (.json)')
+  .option('--validate <docx>', 'Validate block IDs against document')
+  .action(async (options) => {
+    try {
+      const inputPath = resolve(options.input);
+      const outputPath = resolve(options.output);
+
+      const markdown = await readFile(inputPath, 'utf-8');
+      const editConfig = parseMarkdownEdits(markdown);
+
+      // Optional validation against document
+      if (options.validate) {
+        const ir = await extractDocumentIR(resolve(options.validate));
+        const validBlockIds = new Set(ir.blocks.map(block => block.id));
+
+        const invalidEdits = [];
+        for (let i = 0; i < editConfig.edits.length; i++) {
+          const edit = editConfig.edits[i];
+          if (edit.type === 'insert') {
+            if (edit.afterBlockId && !validBlockIds.has(edit.afterBlockId)) {
+              invalidEdits.push({ index: i, blockId: edit.afterBlockId, type: 'afterBlockId' });
+            }
+          } else {
+            if (!validBlockIds.has(edit.blockId)) {
+              invalidEdits.push({ index: i, blockId: edit.blockId, type: 'blockId' });
+            }
+          }
+        }
+
+        if (invalidEdits.length > 0) {
+          console.error('Validation failed. Invalid block IDs:');
+          for (const invalid of invalidEdits) {
+            console.error(`  [${invalid.index}] ${invalid.type}: ${invalid.blockId}`);
+          }
+          process.exit(1);
+        }
+      }
+
+      await writeFile(outputPath, JSON.stringify(editConfig, null, 2));
+      console.log(`Converted ${editConfig.edits.length} edits to ${outputPath}`);
+
+    } catch (error) {
+      console.error('Error:', error.message);
+      process.exit(1);
+    }
+  });
+
+// ============================================================================
+// Command: to-markdown
+// ============================================================================
+
+program
+  .command('to-markdown')
+  .description('Convert JSON edits to markdown format')
+  .requiredOption('-i, --input <file>', 'Input JSON file (.json)')
+  .requiredOption('-o, --output <file>', 'Output markdown file (.md)')
+  .action(async (options) => {
+    try {
+      const inputPath = resolve(options.input);
+      const outputPath = resolve(options.output);
+
+      const editsJson = await readFile(inputPath, 'utf-8');
+      const editConfig = JSON.parse(editsJson);
+
+      const markdown = editsToMarkdown(editConfig);
+
+      await writeFile(outputPath, markdown);
+      console.log(`Converted ${editConfig.edits.length} edits to ${outputPath}`);
 
     } catch (error) {
       console.error('Error:', error.message);
