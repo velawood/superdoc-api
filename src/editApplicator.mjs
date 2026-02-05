@@ -54,6 +54,7 @@ import {
  * @property {boolean} verbose - Enable verbose logging for debugging position mapping (default: false)
  * @property {boolean} strict - Treat truncation warnings as errors (default: false)
  * @property {boolean} skipInvalid - Skip invalid edits instead of failing (default: false)
+ * @property {boolean} allowReduction - Allow intentional content reduction without warning (default: false)
  */
 
 /**
@@ -101,12 +102,14 @@ const DEFAULT_AUTHOR = { name: 'AI Assistant', email: 'ai@example.com' };
  * @param {Object} options - Validation options
  * @param {number} [options.truncationThreshold=0.5] - Warn if newText is less than this ratio of original
  * @param {number} [options.minLengthForCheck=50] - Only check truncation for texts longer than this
+ * @param {boolean} [options.skipReductionWarning=false] - Skip content reduction warnings (for intentional simplifications)
  * @returns {{ valid: boolean, warnings: string[], severity: 'error'|'warning'|'ok' }}
  */
 export function validateNewText(originalText, newText, options = {}) {
   const {
     truncationThreshold = 0.5,
-    minLengthForCheck = 50
+    minLengthForCheck = 50,
+    skipReductionWarning = false
   } = options;
 
   const warnings = [];
@@ -118,7 +121,9 @@ export function validateNewText(originalText, newText, options = {}) {
   }
 
   // Check for significant truncation (but not intentional shortening)
-  if (originalText.length >= minLengthForCheck &&
+  // Skip this check if allowReduction is enabled (for jurisdiction conversions, etc.)
+  if (!skipReductionWarning &&
+      originalText.length >= minLengthForCheck &&
       newText.length < originalText.length * truncationThreshold &&
       newText.length > 20) {
     const reduction = Math.round((1 - newText.length / originalText.length) * 100);
@@ -213,7 +218,8 @@ export async function applyEdits(inputPath, outputPath, editConfig, options = {}
     sortEdits = true,
     verbose = false,
     strict = false,
-    skipInvalid = false
+    skipInvalid = false,
+    allowReduction = false
   } = options;
 
   const results = {
@@ -239,7 +245,10 @@ export async function applyEdits(inputPath, outputPath, editConfig, options = {}
   let editsToApply = [...editConfig.edits];
 
   if (validateFirst) {
-    const validation = validateEditsAgainstIR(editsToApply, ir, { warnOnTruncation: true });
+    const validation = validateEditsAgainstIR(editsToApply, ir, {
+      warnOnTruncation: true,
+      allowReduction
+    });
 
     // Collect warnings
     if (validation.warnings && validation.warnings.length > 0) {
@@ -264,7 +273,7 @@ export async function applyEdits(inputPath, outputPath, editConfig, options = {}
       }
     }
 
-    // Handle validation issues
+    // Handle validation issues (including strict mode warnings added above)
     if (validation.issues.length > 0) {
       // Add validation failures to skipped
       for (const issue of validation.issues) {
@@ -274,43 +283,11 @@ export async function applyEdits(inputPath, outputPath, editConfig, options = {}
           reason: issue.message
         });
       }
-      // Filter out invalid edits
+      // Filter out invalid edits - valid edits will still be applied
       const invalidIndices = new Set(validation.issues.map(i => i.editIndex));
       editsToApply = editsToApply.filter((_, i) => !invalidIndices.has(i));
-
-      // In skipInvalid mode, continue with valid edits
-      // Otherwise, if validation failed (issues that are errors), fail early
-      if (!skipInvalid && !validation.valid) {
-        results.success = false;
-        // Still need to export document even with no edits applied
-        const exportOptions = {
-          isFinalDoc: false,
-          commentsType: 'external',
-        };
-        const exportedBuffer = await editor.exportDocx(exportOptions);
-        await writeFile(outputPath, Buffer.from(exportedBuffer));
-        editor.destroy();
-        return results;
-      }
-    }
-
-    // Handle strict mode warnings as errors
-    if (strict && validation.warnings && validation.warnings.length > 0) {
-      for (const warn of validation.warnings) {
-        const warningIssue = {
-          editIndex: warn.editIndex,
-          type: 'content_warning_strict',
-          blockId: warn.blockId,
-          message: `[STRICT] ${warn.message}`
-        };
-        results.skipped.push({
-          index: warn.editIndex,
-          blockId: warn.blockId,
-          reason: warningIssue.message
-        });
-      }
-      const warnIndices = new Set(validation.warnings.map(w => w.editIndex));
-      editsToApply = editsToApply.filter((_, i) => !warnIndices.has(i));
+      // Note: We continue to apply valid edits; success will be set to false at the end
+      // The skipInvalid flag only affects CLI exit code, not whether valid edits are applied
     }
   }
 
@@ -556,7 +533,7 @@ export async function validateEdits(inputPath, editConfig) {
  * @returns {ValidationResult}
  */
 export function validateEditsAgainstIR(edits, ir, options = {}) {
-  const { warnOnTruncation = true } = options;
+  const { warnOnTruncation = true, allowReduction = false } = options;
   const issues = [];
   const warnings = [];
   const blockIdSet = new Set(ir.blocks.map(b => b.id));
@@ -624,7 +601,9 @@ export function validateEditsAgainstIR(edits, ir, options = {}) {
     if (warnOnTruncation && edit.operation === 'replace' && edit.newText) {
       const block = blockById.get(blockId) || blockBySeqId.get(blockId);
       if (block && block.text) {
-        const validation = validateNewText(block.text, edit.newText);
+        const validation = validateNewText(block.text, edit.newText, {
+          skipReductionWarning: allowReduction
+        });
         if (!validation.valid) {
           // Errors are blocking issues
           issues.push({

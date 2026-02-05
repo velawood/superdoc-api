@@ -8,7 +8,7 @@
     "superdoc-redline": "./superdoc-redline.mjs"
   },
   "scripts": {
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test tests_and_others/tests/*.test.mjs",
     "redline": "node superdoc-redline.mjs"
   },
   "keywords": [

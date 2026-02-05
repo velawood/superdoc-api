@@ -4,7 +4,7 @@ type: reference-documentation
 description: Node.js CLI tool for applying tracked changes and comments to DOCX files
 version: 0.2.0
 agent_doc: SKILL.md
-commands: [extract, read, validate, apply, merge, parse-edits, to-markdown]
+commands: [extract, read, validate, apply, merge, parse-edits, to-markdown, recompress]
 ---
 
 # superdoc-redlines
@@ -156,6 +156,7 @@ node superdoc-redline.mjs apply -i doc.docx -o out.docx -e edits.json --strict  
 | `--strict` | Treat truncation/corruption warnings as errors |
 | `--skip-invalid` | Skip invalid edits instead of failing |
 | `-q, --quiet-warnings` | Suppress content reduction warnings |
+| `--allow-reduction` | Allow intentional content reduction without warnings (for jurisdiction conversions) |
 
 **Validation:**
 
@@ -221,6 +222,32 @@ node superdoc-redline.mjs to-markdown -i edits.json -o edits.md
 |--------|-------------|
 | `-i, --input <file>` | Input JSON file (.json) (required) |
 | `-o, --output <file>` | Output markdown file (.md) (required) |
+
+### `recompress`
+
+Recompress a DOCX file to reduce file size. SuperDoc writes uncompressed DOCX files (~6x larger than normal).
+
+```bash
+node superdoc-redline.mjs recompress --input bloated.docx
+node superdoc-redline.mjs recompress -i bloated.docx -o clean.docx
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-i, --input <path>` | Input DOCX file (required) |
+| `-o, --output <path>` | Output DOCX file (default: overwrites input) |
+
+**Example output:**
+```
+Recompressing: bloated.docx
+  Original size: 2560.0 KB
+  Compressed size: 384.0 KB
+  Reduction: 85%
+  Output: clean.docx
+```
+
+**Note:** Requires `archiver` and `unzipper` packages. Install with: `npm install archiver unzipper`
 
 ---
 
@@ -684,15 +711,25 @@ node superdoc-redline.mjs merge edits1.json edits2.json --output merged.json
 
 **Cause:** The JSZip library uses `ZIP_STORED` (no compression) by default.
 
-**Workaround:** Recompress the output file. See [CONTRACT-REVIEW-SKILL.md](./skills/CONTRACT-REVIEW-SKILL.md) "Step 5: Recompress Output File" for a Python script.
+**Solution:** Use the `recompress` command:
+```bash
+node superdoc-redline.mjs recompress --input bloated.docx --output clean.docx
+```
+
+Alternatively, see [CONTRACT-REVIEW-SKILL.md](./skills/CONTRACT-REVIEW-SKILL.md) "Step 5: Recompress Output File" for a Python script.
 
 ### recommendedChunks Calculation
 
-**Issue:** The `--stats-only` output may show `recommendedChunks: 1` for documents that actually require multiple chunks.
+**Fixed in v0.2.0:** The `--stats-only` output now respects `--max-tokens` and provides multiple recommendations:
 
-**Cause:** The calculation uses a larger default chunk size than the skill-mandated 10K tokens.
+```bash
+node superdoc-redline.mjs read --stats-only --input doc.docx --max-tokens 10000
+```
 
-**Workaround:** Ignore `recommendedChunks` and always use `--max-tokens 10000` for thorough review, or calculate chunks manually: `estimatedTokens / 10000`.
+Output includes:
+- `recommendedChunks` - Based on your specified `--max-tokens` (or default 100k)
+- `recommendedChunksByLimit` - Recommendations for common limits (10k, 25k, 40k, 100k)
+- `maxTokensUsed` - The limit used for the primary calculation
 
 ### Track Changes IR Extraction
 

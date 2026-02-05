@@ -488,6 +488,42 @@ node superdoc-redline.mjs apply --input doc.docx --output out.docx --edits edits
 **Apply options:**
 - `--strict` - Treat truncation/corruption warnings as errors (recommended)
 - `--verbose` - Enable detailed logging for debugging
+- `--allow-reduction` - Allow intentional content reduction (for jurisdiction conversions)
+- `--skip-invalid` - Continue applying valid edits even if some fail
+- `-q, --quiet-warnings` - Suppress content reduction warnings
+
+---
+
+## Validation Warning Decision Tree
+
+When the apply command reports warnings:
+
+### 1. "Significant content reduction (X%)"
+- If intentional simplification (jurisdiction conversion, removing obsolete provisions): **ACCEPTABLE**
+  - Use `--allow-reduction` flag to suppress these warnings
+- If mid-sentence truncation or garbled text: **ERROR** - re-create edit
+- Tip: Don't use `--strict` for jurisdiction conversion work
+
+### 2. "Possible truncation: ends with..."
+- Check if newText makes grammatical sense
+- If original ended same way: **FALSE POSITIVE**
+- If sentence is incomplete: **ERROR**
+
+### 3. TextSelection endpoint warning
+- **IGNORE** - benign ProseMirror internal message
+- Does not affect output file
+
+---
+
+## When to Use Strict Mode
+
+| Mode | Use Case |
+|------|----------|
+| `--strict` | General editing, proofreading, minor corrections |
+| NO `--strict` | Jurisdiction conversion, content simplification, provision deletion |
+| `--allow-reduction` | When intentionally shortening content (e.g., UK statutes → Singapore equivalents) |
+
+Strict mode exits with code 1 if ANY edit is skipped. For partial success scenarios, omit `--strict`.
 
 ---
 

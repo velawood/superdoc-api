@@ -123,6 +123,8 @@ export async function readDocument(inputPath, options = {}) {
  * Useful for determining if chunking is needed before reading.
  *
  * @param {string} inputPath - Path to DOCX file
+ * @param {Object} options - Options for stats calculation
+ * @param {number} [options.maxTokens] - User-specified max tokens per chunk (affects recommendedChunks)
  * @returns {Promise<DocumentStats>} - Quick statistics about the document
  *
  * @typedef {Object} DocumentStats
@@ -130,9 +132,12 @@ export async function readDocument(inputPath, options = {}) {
  * @property {number} blockCount - Number of blocks in the document
  * @property {number} estimatedCharacters - Total character count
  * @property {number} estimatedTokens - Estimated token count
- * @property {number} recommendedChunks - Recommended number of chunks
+ * @property {number} recommendedChunks - Recommended number of chunks (based on maxTokens or default 100k)
+ * @property {Object} recommendedChunksByLimit - Chunk recommendations for various token limits
  */
-export async function getDocumentStats(inputPath) {
+export async function getDocumentStats(inputPath, options = {}) {
+  const { maxTokens = 100000 } = options;
+
   try {
     // Extract with truncated text for speed
     const ir = await extractDocumentIR(inputPath, {
@@ -157,15 +162,25 @@ export async function getDocumentStats(inputPath) {
     // Rough token estimate: ~4 characters per token
     const estimatedTokens = Math.ceil(estimatedCharacters / 4);
 
-    // Recommended chunks based on 100k token limit
-    const recommendedChunks = Math.max(1, Math.ceil(estimatedTokens / 100000));
+    // Recommended chunks based on user-specified max tokens (or default 100k)
+    const recommendedChunks = Math.max(1, Math.ceil(estimatedTokens / maxTokens));
+
+    // Also provide recommendations for common token limits
+    const recommendedChunksByLimit = {
+      "10k": Math.max(1, Math.ceil(estimatedTokens / 10000)),
+      "25k": Math.max(1, Math.ceil(estimatedTokens / 25000)),
+      "40k": Math.max(1, Math.ceil(estimatedTokens / 40000)),
+      "100k": Math.max(1, Math.ceil(estimatedTokens / 100000))
+    };
 
     return {
       filename: ir.metadata.filename,
       blockCount: ir.blocks.length,
       estimatedCharacters,
       estimatedTokens,
-      recommendedChunks
+      recommendedChunks,
+      recommendedChunksByLimit,
+      maxTokensUsed: maxTokens
     };
   } catch (error) {
     throw new Error(`Failed to get document stats: ${error.message}`);

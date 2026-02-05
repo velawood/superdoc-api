@@ -115,7 +115,9 @@ program
       const inputPath = resolve(options.input);
 
       if (options.statsOnly) {
-        const stats = await getDocumentStats(inputPath);
+        const stats = await getDocumentStats(inputPath, {
+          maxTokens: options.maxTokens
+        });
         console.log(JSON.stringify(stats, null, 2));
         return;
       }
@@ -191,6 +193,7 @@ program
   .option('--strict', 'Treat truncation warnings as errors')
   .option('--skip-invalid', 'Skip invalid edits instead of failing')
   .option('-q, --quiet-warnings', 'Suppress content reduction warnings')
+  .option('--allow-reduction', 'Allow intentional content reduction without warnings (for jurisdiction conversions)')
   .action(async (options) => {
     try {
       const inputPath = resolve(options.input);
@@ -217,6 +220,7 @@ program
         verbose: options.verbose || false,
         strict: options.strict || false,
         skipInvalid: options.skipInvalid || false,
+        allowReduction: options.allowReduction || false,
         author: {
           name: options.authorName,
           email: options.authorEmail
@@ -411,6 +415,94 @@ program
 
       await writeFile(outputPath, markdown);
       console.log(`Converted ${editConfig.edits.length} edits to ${outputPath}`);
+
+    } catch (error) {
+      console.error('Error:', error.message);
+      process.exit(1);
+    }
+  });
+
+// ============================================================================
+// Command: recompress
+// ============================================================================
+
+program
+  .command('recompress')
+  .description('Recompress a DOCX file to reduce file size (SuperDoc writes uncompressed)')
+  .requiredOption('-i, --input <path>', 'Input DOCX file')
+  .option('-o, --output <path>', 'Output DOCX file (default: overwrites input)')
+  .action(async (options) => {
+    try {
+      const { createReadStream, createWriteStream, unlinkSync, renameSync, statSync } = await import('fs');
+      const { tmpdir } = await import('os');
+      const { join } = await import('path');
+      const { promisify } = await import('util');
+      const { pipeline } = await import('stream');
+      const pipelineAsync = promisify(pipeline);
+
+      // Use dynamic import for archiver and unzipper
+      let archiver, unzipper;
+      try {
+        archiver = (await import('archiver')).default;
+        unzipper = await import('unzipper');
+      } catch (e) {
+        console.error('Error: recompress requires archiver and unzipper packages.');
+        console.error('Install with: npm install archiver unzipper');
+        process.exit(1);
+      }
+
+      const inputPath = resolve(options.input);
+      const outputPath = options.output ? resolve(options.output) : inputPath;
+      const tempDir = join(tmpdir(), `docx-recompress-${Date.now()}`);
+      const tempZip = join(tmpdir(), `docx-recompress-${Date.now()}.docx`);
+
+      // Get original size
+      const originalSize = statSync(inputPath).size;
+      console.log(`Recompressing: ${inputPath}`);
+      console.log(`  Original size: ${(originalSize / 1024).toFixed(1)} KB`);
+
+      // Extract DOCX to temp directory
+      const { mkdir, rm } = await import('fs/promises');
+      await mkdir(tempDir, { recursive: true });
+
+      await pipelineAsync(
+        createReadStream(inputPath),
+        unzipper.Extract({ path: tempDir })
+      );
+
+      // Create new compressed DOCX
+      const archive = archiver('zip', {
+        zlib: { level: 9 } // Maximum compression
+      });
+
+      const outputStream = createWriteStream(tempZip);
+
+      await new Promise((resolve, reject) => {
+        outputStream.on('close', resolve);
+        outputStream.on('error', reject);
+        archive.on('error', reject);
+
+        archive.pipe(outputStream);
+        archive.directory(tempDir, false);
+        archive.finalize();
+      });
+
+      // Get compressed size
+      const compressedSize = statSync(tempZip).size;
+      const reduction = Math.round((1 - compressedSize / originalSize) * 100);
+
+      // Move temp file to output
+      if (outputPath === inputPath) {
+        unlinkSync(inputPath);
+      }
+      renameSync(tempZip, outputPath);
+
+      // Cleanup temp directory
+      await rm(tempDir, { recursive: true, force: true });
+
+      console.log(`  Compressed size: ${(compressedSize / 1024).toFixed(1)} KB`);
+      console.log(`  Reduction: ${reduction}%`);
+      console.log(`  Output: ${outputPath}`);
 
     } catch (error) {
       console.error('Error:', error.message);

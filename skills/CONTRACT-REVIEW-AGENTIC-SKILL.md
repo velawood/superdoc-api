@@ -249,17 +249,19 @@ Report: edit count, deletions made, compound terms changed, any issues.
 
 ### Spawning Sub-Agents
 
-> **⚠️ Claude Code Note (February 2026)**
+> **⚠️ Multi-Agent Workflow (February 2026)**
 >
-> Claude Code does not support parallel sub-agent spawning via `Promise.all([Task(...)])`.
-> Instead, simulate the multi-agent workflow by creating separate edit files sequentially:
+> Claude Code executes sub-agents **sequentially** (not in parallel). The organizational benefit is:
+> - Clear separation of concerns (definitions, provisions, warranties)
+> - Smaller, focused edit files easier to validate
+> - Merge command consolidates with conflict detection
+>
+> This is NOT a "simulation" - it's the actual workflow, just sequential rather than parallel.
 >
 > 1. Work on Agent A's block range → create `edits-definitions.json`
 > 2. Work on Agent B's block range → create `edits-provisions.json`
 > 3. Work on Agent C's block range → create `edits-warranties.json`
 > 4. Merge all files together
->
-> The organizational value of decomposition (separating by clause type) remains beneficial even without actual parallelization.
 
 **For environments with parallel task support:**
 ```javascript
@@ -452,6 +454,59 @@ Consider running orchestrator and sub-agents as separate sessions to avoid conte
 **Key insight:** The single-agent approach worked well for this 143K token document. Sub-agents would help for documents >200K tokens or when multiple reviewers need to work in parallel.
 
 **Shared learnings** (edit format, block ID confusion, etc.) documented in CONTRACT-REVIEW-SKILL.md.
+
+---
+
+## Block ID Verification (CRITICAL)
+
+Before creating edits for a block:
+1. Read the relevant chunk containing that block
+2. Verify the block ID matches expected content
+3. Use grep on contract-ir.json if uncertain: `grep -B2 "expected text" contract-ir.json`
+
+Block IDs can be off by 5-10 positions from estimates. **Always verify.**
+
+---
+
+## UK-to-Singapore: Employment Law
+
+UK TUPE (Transfer of Undertakings) has **NO Singapore equivalent**.
+
+### Correct Adaptation
+
+1. **DELETE definitions:** b257 (TULRCA), b258 (TUPE)
+2. **REPLACE mentions:** "TUPE" → "the transfer arrangements contemplated by this agreement"
+3. **REMOVE** automatic transfer assumptions
+4. **ADD** consent-based transfer language where needed
+
+Singapore Employment Act covers basic terms but NOT automatic transfer of employment.
+
+---
+
+## Comprehensive Coverage Checklist
+
+For jurisdiction conversion, ensure ALL of the following are edited:
+
+### Definitions Section
+- [ ] All UK statute definitions replaced with Singapore equivalents
+- [ ] All UK agency definitions replaced
+- [ ] All UK-specific terms deleted if no equivalent
+
+### Throughout Document (trace every usage)
+- [ ] Every "VAT" → "GST" (not just definitions)
+- [ ] Every "HMRC" → "IRAS"
+- [ ] Every UK statute reference
+- [ ] Every UK agency reference
+
+### Deletion Candidates (UK-only, no Singapore equivalent)
+- [ ] Inheritance tax provisions (Singapore abolished estate duty 2008)
+- [ ] TUPE automatic transfer clauses
+- [ ] UK/EU merger control thresholds
+- [ ] UK Planning Acts specific references
+
+### Post-Apply Verification
+Run: `grep -i "UK\|England\|Wales\|HMRC\|VAT\|TUPE" amended-contract.docx`
+Any hits indicate missed edits.
 
 ---
 
