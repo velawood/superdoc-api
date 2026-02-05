@@ -23,7 +23,7 @@
     "contracts"
   ],
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@harbour-enterprises/superdoc": "^1.0.0",
     "archiver": "^7.0.1",
