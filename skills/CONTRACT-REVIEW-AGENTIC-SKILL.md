@@ -96,24 +96,109 @@ See CONTRACT-REVIEW-SKILL.md for Context Document template. For agentic workflow
 
 ## Phase 2: Work Decomposition
 
+### Block Range Assignment Best Practices
+
+> **⚠️ Critical Lesson Learned (5 February 2026)**
+>
+> In a UK→Singapore asset purchase adaptation, the "boilerplate" agent was assigned blocks b1231-b1317, but the governing law clauses it needed to edit were actually at b651, b658, b680, b681. The sequential block assignment didn't account for where clause types were actually located.
+>
+> **Key insight:** Block numbers are sequential through the document, but clause types are not necessarily sequential. Definitions may reference governing law; warranties may contain jurisdiction-specific terms; schedules may duplicate main document provisions.
+
+### Discovery-First Assignment (Recommended)
+
+Before assigning ranges, the orchestrator MUST map clause types to actual block locations:
+
+```markdown
+## Clause Location Map (Built During Discovery)
+
+| Clause Type | Block IDs | Section Name |
+|-------------|-----------|--------------|
+| Definitions | b001-b300 | Clause 1 |
+| Governing Law | b651, b658, b680, b681 | Clause 24 |
+| Jurisdiction | b682-b695 | Clause 25 |
+| TUPE/Employment | b450-b480, b720-b750 | Clauses 12, Schedule 4 |
+| Tax Provisions | b380-b420, b850-b900 | Clauses 9, Schedule 7 |
+| Boilerplate | b1100-b1200 | Clauses 26-30 |
+```
+
+Then assign agents by **clause type grouping**, not sequential ranges:
+
+```markdown
+## Agent Assignments (By Clause Type)
+
+### Agent A: Definitions & Terms
+- Blocks: b001-b300
+- Also: Any blocks referencing defined terms
+- Output: edits-definitions.json
+
+### Agent B: Jurisdiction-Sensitive Clauses
+- Blocks: b651, b658, b680-b695, b1100-b1150
+- Includes: Governing law, jurisdiction, service of process
+- Output: edits-jurisdiction.json
+
+### Agent C: Employment & TUPE
+- Blocks: b450-b480, b720-b750
+- Includes: TUPE references wherever they appear
+- Output: edits-employment.json
+```
+
 ### Assignment Strategies
 
-**Section-Based (Recommended):** Assign contiguous block ranges based on document structure.
+**Clause-Type Based (Recommended):** Group blocks by legal clause type, even if non-contiguous. The orchestrator must identify all locations of each clause type during discovery.
 
-**Topic-Based:** Assign specific amendment categories across the document (e.g., "only tax provisions").
+**Section-Based:** Assign contiguous block ranges based on document structure. Simpler but risks missing related clauses in different sections.
 
-### Example Assignments
+**Topic-Based:** Assign specific amendment categories across the document (e.g., "only tax provisions"). Requires thorough discovery to identify all relevant blocks.
+
+### Include Overlap Buffer Zones
+
+When clause boundaries are ambiguous, include buffer zones:
+
+```markdown
+### Agent A: Definitions (b001-b320)
+- Core range: b001-b300
+- Buffer: b301-b320 (may contain late definitions)
+
+### Agent B: Core Provisions (b290-b620)
+- Buffer: b290-b310 (overlap with definitions)
+- Core range: b311-b600
+- Buffer: b601-b620 (may contain provision spillover)
+```
+
+Use `-c first` or `-c last` conflict strategy during merge to handle overlaps.
+
+### Example Assignments (Improved)
 
 ```markdown
 ### Agent A: Definitions (b001-b300)
+- **Also check**: b651 (may contain "Business Day" jurisdiction refs)
 - Output: edits-definitions.json
 
-### Agent B: Core Provisions (b301-b600)  
+### Agent B: Core Provisions (b301-b600)
 - Output: edits-provisions.json
 
 ### Agent C: Warranties & Schedules (b601-b900)
+- **Also check**: Governing law at b651, b658 if not assigned elsewhere
 - Output: edits-warranties.json
+
+### Agent D: Boilerplate & Jurisdiction (b901-b1200)
+- **Critical blocks**: b651, b658, b680, b681 (governing law/jurisdiction)
+- Output: edits-boilerplate.json
 ```
+
+### Anti-Pattern: Sequential-Only Assignment
+
+❌ **Don't do this:**
+```markdown
+Agent A: b001-b400
+Agent B: b401-b800
+Agent C: b801-b1200
+```
+
+This ignores clause type distribution and will miss edits when:
+- Governing law appears in multiple places
+- Defined terms are referenced throughout
+- Schedules repeat main document language
 
 ---
 
@@ -293,6 +378,24 @@ Sub-agents must respect constraints from the Context Document:
 
 ## Session Learnings
 
+### 5 February 2026 - Multi-Agent UK→Singapore Adaptation
+
+**Issue discovered:** Sequential block range assignment caused the "boilerplate" agent (assigned b1231-b1317) to miss governing law clauses that were actually located at b651, b658, b680, b681.
+
+**Root cause:** Block ranges were assigned by sequential document position rather than by clause type. Legal documents don't have clause types in sequential order - governing law can appear in definitions, main provisions, and schedules.
+
+**Solution implemented:** Added "Block Range Assignment Best Practices" section to this document with:
+1. Discovery-first mapping of clause types to block locations
+2. Clause-type based assignment (not sequential)
+3. Overlap buffer zones for ambiguous boundaries
+
+**Also fixed in superdoc-redlines library:**
+- Added `normalizeEdit()` function for field name normalization
+- Added field validation to `validateMergedEdits()`
+- Added `--normalize` flag to merge command
+- Added `--skip-invalid` flag to apply command
+- Added `--quiet-warnings` flag to apply command
+
 ### 4 February 2026 - Asset Purchase Agreement
 
 **Key insight:** The single-agent approach worked well for this 143K token document. Sub-agents would help for documents >200K tokens or when multiple reviewers need to work in parallel.
@@ -309,4 +412,4 @@ Sub-agents must respect constraints from the Context Document:
 
 ---
 
-*Last updated: 4 February 2026*
+*Last updated: 5 February 2026*

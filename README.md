@@ -154,6 +154,8 @@ node superdoc-redline.mjs apply -i doc.docx -o out.docx -e edits.json --strict  
 | `--no-sort` | Skip automatic edit sorting |
 | `-v, --verbose` | Enable verbose logging for debugging position mapping |
 | `--strict` | Treat truncation/corruption warnings as errors |
+| `--skip-invalid` | Skip invalid edits instead of failing |
+| `-q, --quiet-warnings` | Suppress content reduction warnings |
 
 **Validation:**
 
@@ -181,6 +183,7 @@ node superdoc-redline.mjs merge edits-*.json -o merged.json -v doc.docx
 | `<files...>` | Edit files to merge (required, positional) |
 | `-o, --output <path>` | Output merged edits file (required) |
 | `-c, --conflict <strategy>` | Conflict strategy: `error\|first\|last\|combine` (default: `error`) |
+| `-n, --normalize` | Normalize field names from common variants (type→operation, etc.) |
 | `-v, --validate <docx>` | Validate merged edits against document |
 
 **Conflict Strategies:**
@@ -506,21 +509,36 @@ node superdoc-redline.mjs extract -i contract.docx -o contract-ir.json
 # Agent B -> edits-warranties.json
 # Agent C -> edits-govlaw.json
 
-# 3. Merge all edits
+# 3. Merge all edits (use --normalize if sub-agents use inconsistent field names)
 node superdoc-redline.mjs merge \
   edits-definitions.json \
   edits-warranties.json \
   edits-govlaw.json \
   -o merged-edits.json \
-  -c combine \
+  -c error \
+  --normalize \
   -v contract.docx
 
-# 4. Apply merged edits
+# 4. Apply merged edits (use --skip-invalid to continue past bad edits)
 node superdoc-redline.mjs apply \
   -i contract.docx \
   -o redlined.docx \
-  -e merged-edits.json
+  -e merged-edits.json \
+  --skip-invalid
 ```
+
+### Block Range Assignment Best Practices
+
+> **⚠️ Important:** Don't assign sequential block ranges (b001-b300, b301-b600, etc.) without considering clause type distribution.
+
+Legal documents have clause types scattered throughout - governing law clauses may appear in definitions, main provisions, and schedules. Sequential assignment will miss edits when agents don't have all blocks for their assigned clause types.
+
+**Recommended approach:**
+1. During discovery, map clause types to actual block locations
+2. Assign agents by clause type grouping, not sequential ranges
+3. Include overlap buffer zones for ambiguous boundaries
+
+See [CONTRACT-REVIEW-AGENTIC-SKILL.md](./skills/CONTRACT-REVIEW-AGENTIC-SKILL.md) for detailed guidance on multi-agent orchestration.
 
 ---
 
@@ -598,14 +616,22 @@ const result = await readDocument('contract.docx', { chunkIndex: 0 });
 ### Edit Merging
 
 ```javascript
-import { mergeEditFiles, splitBlocksForAgents } from './src/editMerge.mjs';
+import { mergeEditFiles, normalizeEdit, splitBlocksForAgents } from './src/editMerge.mjs';
 
 // Split work for sub-agents
 const ranges = splitBlocksForAgents(ir, 3);
 
-// Merge results
+// Merge results (with field name normalization)
 const result = await mergeEditFiles(['a.json', 'b.json'], {
-  conflictStrategy: 'combine'
+  conflictStrategy: 'error',
+  normalize: true  // Fixes type→operation, replacement→newText, etc.
+});
+
+// Normalize a single edit manually
+const normalized = normalizeEdit({
+  blockId: 'b001',
+  type: 'replace',      // Will become 'operation'
+  replacement: 'text'   // Will become 'newText'
 });
 ```
 

@@ -53,6 +53,7 @@ import {
  * @property {boolean} sortEdits - Auto-sort edits for safe application (default: true)
  * @property {boolean} verbose - Enable verbose logging for debugging position mapping (default: false)
  * @property {boolean} strict - Treat truncation warnings as errors (default: false)
+ * @property {boolean} skipInvalid - Skip invalid edits instead of failing (default: false)
  */
 
 /**
@@ -211,7 +212,8 @@ export async function applyEdits(inputPath, outputPath, editConfig, options = {}
     validateFirst = true,
     sortEdits = true,
     verbose = false,
-    strict = false
+    strict = false,
+    skipInvalid = false
   } = options;
 
   const results = {
@@ -262,7 +264,8 @@ export async function applyEdits(inputPath, outputPath, editConfig, options = {}
       }
     }
 
-    if (!validation.valid || (strict && validation.warnings && validation.warnings.length > 0)) {
+    // Handle validation issues
+    if (validation.issues.length > 0) {
       // Add validation failures to skipped
       for (const issue of validation.issues) {
         results.skipped.push({
@@ -274,6 +277,40 @@ export async function applyEdits(inputPath, outputPath, editConfig, options = {}
       // Filter out invalid edits
       const invalidIndices = new Set(validation.issues.map(i => i.editIndex));
       editsToApply = editsToApply.filter((_, i) => !invalidIndices.has(i));
+
+      // In skipInvalid mode, continue with valid edits
+      // Otherwise, if validation failed (issues that are errors), fail early
+      if (!skipInvalid && !validation.valid) {
+        results.success = false;
+        // Still need to export document even with no edits applied
+        const exportOptions = {
+          isFinalDoc: false,
+          commentsType: 'external',
+        };
+        const exportedBuffer = await editor.exportDocx(exportOptions);
+        await writeFile(outputPath, Buffer.from(exportedBuffer));
+        editor.destroy();
+        return results;
+      }
+    }
+
+    // Handle strict mode warnings as errors
+    if (strict && validation.warnings && validation.warnings.length > 0) {
+      for (const warn of validation.warnings) {
+        const warningIssue = {
+          editIndex: warn.editIndex,
+          type: 'content_warning_strict',
+          blockId: warn.blockId,
+          message: `[STRICT] ${warn.message}`
+        };
+        results.skipped.push({
+          index: warn.editIndex,
+          blockId: warn.blockId,
+          reason: warningIssue.message
+        });
+      }
+      const warnIndices = new Set(validation.warnings.map(w => w.editIndex));
+      editsToApply = editsToApply.filter((_, i) => !warnIndices.has(i));
     }
   }
 

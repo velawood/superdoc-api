@@ -26,6 +26,7 @@ import { readFile, writeFile } from 'fs/promises';
  * @property {ConflictStrategy} conflictStrategy - How to handle conflicts
  * @property {boolean} preserveOrder - Maintain relative order within each file (default: true)
  * @property {string} outputPath - Optional path to write merged edits
+ * @property {boolean} normalize - Normalize field names from common variants (default: false)
  */
 
 /**
@@ -67,6 +68,45 @@ import { readFile, writeFile } from 'fs/promises';
  */
 
 /**
+ * Normalize common field name variants to standard format.
+ * Sub-agents may use different field names for the same concept.
+ * This function maps them to the expected format.
+ *
+ * @param {Object} edit - Raw edit object from sub-agent
+ * @returns {Object} - Normalized edit with standard field names
+ */
+export function normalizeEdit(edit) {
+  const normalized = { ...edit };
+
+  // Normalize operation field (type, action → operation)
+  if (!normalized.operation) {
+    normalized.operation = edit.type || edit.action;
+    delete normalized.type;
+    delete normalized.action;
+  }
+
+  // Normalize newText field for replace operations (replacement, new → newText)
+  if (!normalized.newText && normalized.operation === 'replace') {
+    normalized.newText = edit.replacement || edit.new;
+    delete normalized.replacement;
+    delete normalized.new;
+  }
+
+  // Normalize comment field (rationale, reason → comment)
+  if (!normalized.comment) {
+    normalized.comment = edit.rationale || edit.reason;
+    delete normalized.rationale;
+    delete normalized.reason;
+  }
+
+  // Clean up extra fields that are not part of the standard format
+  delete normalized.original;
+  delete normalized.old;
+
+  return normalized;
+}
+
+/**
  * Merge multiple edit files from sub-agents into a single edit file.
  * Detects conflicts and resolves ordering issues.
  *
@@ -78,7 +118,8 @@ export async function mergeEditFiles(editFilePaths, options = {}) {
   const {
     conflictStrategy = 'error',
     preserveOrder = true,
-    outputPath = null
+    outputPath = null,
+    normalize = false
   } = options;
 
   const allEdits = [];
@@ -127,7 +168,9 @@ export async function mergeEditFiles(editFilePaths, options = {}) {
     }
 
     for (let editIndex = 0; editIndex < editFile.edits.length; editIndex++) {
-      const edit = { ...editFile.edits[editIndex] };
+      // Apply normalization if enabled
+      const rawEdit = { ...editFile.edits[editIndex] };
+      const edit = normalize ? normalizeEdit(rawEdit) : rawEdit;
       const blockId = edit.blockId || edit.afterBlockId;
 
       // Track source for debugging
@@ -258,7 +301,8 @@ export async function mergeEditFiles(editFilePaths, options = {}) {
 export function mergeEdits(editFiles, options = {}) {
   const {
     conflictStrategy = 'error',
-    preserveOrder = true
+    preserveOrder = true,
+    normalize = false
   } = options;
 
   const allEdits = [];
@@ -270,7 +314,9 @@ export function mergeEdits(editFiles, options = {}) {
     const edits = editFile.edits || [];
 
     for (let editIndex = 0; editIndex < edits.length; editIndex++) {
-      const edit = { ...edits[editIndex] };
+      // Apply normalization if enabled
+      const rawEdit = { ...edits[editIndex] };
+      const edit = normalize ? normalizeEdit(rawEdit) : rawEdit;
       const blockId = edit.blockId || edit.afterBlockId;
 
       // Track source for debugging
@@ -362,7 +408,7 @@ export function mergeEdits(editFiles, options = {}) {
 /**
  * @typedef {Object} ValidationIssue
  * @property {number} editIndex - Index of the problematic edit
- * @property {'missing_block'|'delete_then_reference'|'invalid_operation'} type
+ * @property {'missing_block'|'delete_then_reference'|'invalid_operation'|'missing_field'} type
  * @property {string} blockId - The block ID involved
  * @property {string} message - Human-readable description
  */
@@ -385,6 +431,7 @@ export function validateMergedEdits(mergedEdits, ir) {
   const issues = [];
   const blockIdSet = new Set(ir.blocks.map(b => b.id));
   const seqIdSet = new Set(ir.blocks.map(b => b.seqId));
+  const validOperations = ['replace', 'delete', 'comment', 'insert'];
 
   // Track deleted blocks for detecting delete-then-reference conflicts
   const deletedBlocks = new Set();
@@ -402,6 +449,62 @@ export function validateMergedEdits(mergedEdits, ir) {
         message: `Block ${blockId} not found in document`
       });
       continue;
+    }
+
+    // Validate operation field exists
+    if (!edit.operation) {
+      const altFields = [edit.type, edit.action].filter(Boolean);
+      issues.push({
+        editIndex: i,
+        type: 'missing_field',
+        blockId,
+        message: 'Edit missing required "operation" field' +
+          (altFields.length > 0 ? ` (found "${altFields.join('/')}" - did you mean "operation"?)` : '')
+      });
+      continue;
+    }
+
+    // Validate operation is known
+    if (!validOperations.includes(edit.operation)) {
+      issues.push({
+        editIndex: i,
+        type: 'invalid_operation',
+        blockId,
+        message: `Invalid operation: "${edit.operation}". Valid: ${validOperations.join(', ')}`
+      });
+      continue;
+    }
+
+    // Validate operation-specific required fields
+    if (edit.operation === 'replace' && !edit.newText) {
+      const altField = edit.replacement || edit.new;
+      issues.push({
+        editIndex: i,
+        type: 'missing_field',
+        blockId,
+        message: 'Replace operation missing "newText" field' +
+          (altField ? ' (found "replacement"/"new" - did you mean "newText"?)' : '')
+      });
+    }
+
+    if (edit.operation === 'comment' && !edit.comment) {
+      const altField = edit.rationale || edit.reason;
+      issues.push({
+        editIndex: i,
+        type: 'missing_field',
+        blockId,
+        message: 'Comment operation missing "comment" field' +
+          (altField ? ' (found "rationale"/"reason" - did you mean "comment"?)' : '')
+      });
+    }
+
+    if (edit.operation === 'insert' && !edit.text) {
+      issues.push({
+        editIndex: i,
+        type: 'missing_field',
+        blockId,
+        message: 'Insert operation missing "text" field'
+      });
     }
 
     // Track deletes

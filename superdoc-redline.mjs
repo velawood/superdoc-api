@@ -189,6 +189,8 @@ program
   .option('--no-sort', 'Skip automatic edit sorting')
   .option('-v, --verbose', 'Enable verbose logging for debugging position mapping')
   .option('--strict', 'Treat truncation warnings as errors')
+  .option('--skip-invalid', 'Skip invalid edits instead of failing')
+  .option('-q, --quiet-warnings', 'Suppress content reduction warnings')
   .action(async (options) => {
     try {
       const inputPath = resolve(options.input);
@@ -214,6 +216,7 @@ program
         sortEdits: options.sort !== false,
         verbose: options.verbose || false,
         strict: options.strict || false,
+        skipInvalid: options.skipInvalid || false,
         author: {
           name: options.authorName,
           email: options.authorEmail
@@ -224,12 +227,14 @@ program
       console.log(`  Applied: ${result.applied}`);
       console.log(`  Skipped: ${result.skipped.length}`);
 
-      // Show warnings if any
+      // Show warnings if any (unless --quiet-warnings)
       if (result.warnings && result.warnings.length > 0) {
         console.log(`  Warnings: ${result.warnings.length}`);
-        console.log(`\nWarnings (possible truncation/corruption):`);
-        for (const warn of result.warnings) {
-          console.log(`  [${warn.editIndex}] ${warn.blockId} - ${warn.message}`);
+        if (!options.quietWarnings) {
+          console.log(`\nWarnings (possible truncation/corruption):`);
+          for (const warn of result.warnings) {
+            console.log(`  [${warn.editIndex}] ${warn.blockId} - ${warn.message}`);
+          }
         }
       }
 
@@ -246,8 +251,8 @@ program
 
       console.log(`\nOutput: ${outputPath}`);
 
-      // Exit with error if any edits were skipped
-      if (result.skipped.length > 0) {
+      // Exit with error if any edits were skipped (unless --skip-invalid mode)
+      if (result.skipped.length > 0 && !options.skipInvalid) {
         process.exit(1);
       }
 
@@ -272,6 +277,7 @@ program
   .description('Merge edit files from multiple sub-agents')
   .requiredOption('-o, --output <path>', 'Output merged edits file')
   .option('-c, --conflict <strategy>', 'Conflict strategy: error|first|last|combine', 'error')
+  .option('-n, --normalize', 'Normalize field names from common variants (type→operation, etc.)')
   .option('-v, --validate <docx>', 'Validate merged edits against document')
   .argument('<files...>', 'Edit files to merge')
   .action(async (files, options) => {
@@ -282,6 +288,7 @@ program
 
       const result = await mergeEditFiles(editPaths, {
         conflictStrategy: options.conflict,
+        normalize: options.normalize || false,
         outputPath: resolve(options.output)
       });
 

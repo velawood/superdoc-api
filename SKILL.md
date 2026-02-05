@@ -101,6 +101,8 @@ Result: `redlined.docx` with tracked changes visible in Microsoft Word.
 
 **Apply options:**
 - `--strict` - Treat truncation/corruption warnings as errors (recommended)
+- `--skip-invalid` - Skip invalid edits instead of failing (apply valid ones)
+- `-q, --quiet-warnings` - Suppress content reduction warnings
 - `--verbose` - Enable detailed logging for debugging
 - `--no-track-changes` - Disable track changes mode
 - `--no-validate` - Skip validation before applying
@@ -435,21 +437,29 @@ node superdoc-redline.mjs extract -i contract.docx -o ir.json
 # 2. Each sub-agent produces edits (no conflicts if different blockIds)
 # edits-agent-a.json, edits-agent-b.json
 
-# 3. Merge
+# 3. Merge (use --normalize if sub-agents use inconsistent field names)
 node superdoc-redline.mjs merge \
   edits-agent-a.json edits-agent-b.json \
   -o merged.json \
-  -c combine
+  -c error \
+  --normalize
 
-# 4. Apply merged edits
-node superdoc-redline.mjs apply -i contract.docx -o redlined.docx -e merged.json
+# 4. Apply merged edits (use --skip-invalid to continue past bad edits)
+node superdoc-redline.mjs apply -i contract.docx -o redlined.docx -e merged.json --skip-invalid
 ```
 
-Conflict strategies:
-- `error` - Fail if same block edited by multiple agents (safest)
-- `first` - Keep first agent's edit
-- `last` - Keep last agent's edit
-- `combine` - Merge comments, use first for other operations
+**Merge options:**
+- `-c error` - Fail if same block edited by multiple agents (safest, recommended)
+- `-c first` - Keep first agent's edit
+- `-c last` - Keep last agent's edit
+- `-c combine` - Merge comments, use first for other operations
+- `-n, --normalize` - Fix inconsistent field names (type→operation, etc.)
+
+> **⚠️ Block Range Assignment Warning**
+>
+> Don't assign sequential block ranges (b001-b300, b301-b600, etc.) without considering clause type distribution. Legal documents have clause types scattered throughout - governing law may appear in definitions, main body, and schedules.
+>
+> **Best practice:** During discovery, map clause types to actual block locations, then assign agents by clause type grouping. See `skills/CONTRACT-REVIEW-AGENTIC-SKILL.md` for detailed guidance.
 
 ---
 
@@ -561,9 +571,12 @@ node superdoc-redline.mjs apply -i doc.docx -o out.docx -e edits.md
 | `validate -i doc.docx -e edits.json` | Validate edits |
 | `apply -i doc.docx -o out.docx -e edits.json` | Apply with track changes |
 | `apply ... --strict` | Fail on truncation warnings |
+| `apply ... --skip-invalid` | Skip bad edits, apply good ones |
+| `apply ... -q` | Suppress content reduction warnings |
 | `apply ... --verbose` | Debug position mapping |
 | `apply -i doc.docx -o out.docx -e edits.md` | Apply from markdown |
 | `merge a.json b.json -o merged.json -c error` | Merge agent edits (strict) |
+| `merge ... --normalize` | Fix inconsistent field names |
 | `parse-edits -i edits.md -o edits.json` | Convert markdown to JSON |
 | `to-markdown -i edits.json -o edits.md` | Convert JSON to markdown |
 
