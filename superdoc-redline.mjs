@@ -164,6 +164,16 @@ program
 
       console.log(JSON.stringify(result, null, 2));
 
+      // Check for content reduction warnings and inform user about --allow-reduction
+      const reductionWarnings = (result.warnings || []).filter(w =>
+        w.message && w.message.includes('content reduction')
+      );
+      if (reductionWarnings.length > 0) {
+        console.log('\n⚠️  Content reduction detected in some edits.');
+        console.log('   If this is intentional (e.g., jurisdiction conversion), use:');
+        console.log('   apply --allow-reduction to suppress these warnings.');
+      }
+
       if (!result.valid) {
         process.exit(1);
       }
@@ -433,7 +443,7 @@ program
   .option('-t, --text <text>', 'Text to search for (case-insensitive)')
   .option('-r, --regex <pattern>', 'Regex pattern to search for')
   .option('-c, --context <chars>', 'Context characters to show around match', parseIntArg, 50)
-  .option('--max-results <count>', 'Maximum number of results', parseIntArg, 20)
+  .option('-l, --limit <n>', 'Maximum results (default: 20, use "all" for unlimited)', '20')
   .action(async (options) => {
     try {
       const inputPath = resolve(options.input);
@@ -460,24 +470,32 @@ program
         process.exit(1);
       }
 
+      // Parse limit option
+      const limitStr = options.limit;
+      const maxResults = limitStr.toLowerCase() === 'all' ? Infinity : parseInt(limitStr, 10);
+      if (Number.isNaN(maxResults) || maxResults < 1) {
+        console.error('Error: --limit must be a positive number or "all"');
+        process.exit(1);
+      }
+
       // Search blocks
       const results = [];
+      let totalMatches = 0;
       for (const block of ir.blocks) {
         if (searchFn(block.text || '')) {
-          results.push({
-            seqId: block.seqId,
-            id: block.id,
-            type: block.type,
-            text: block.text,
-            preview: truncateWithContext(
-              block.text,
-              options.text || options.regex,
-              options.context
-            )
-          });
-
-          if (results.length >= options.maxResults) {
-            break;
+          totalMatches++;
+          if (results.length < maxResults) {
+            results.push({
+              seqId: block.seqId,
+              id: block.id,
+              type: block.type,
+              text: block.text,
+              preview: truncateWithContext(
+                block.text,
+                options.text || options.regex,
+                options.context
+              )
+            });
           }
         }
       }
@@ -486,7 +504,10 @@ program
       if (results.length === 0) {
         console.log('No blocks found matching the search criteria.');
       } else {
-        console.log(`Found ${results.length} block(s):\n`);
+        const truncatedMsg = totalMatches > results.length
+          ? ` (showing ${results.length} of ${totalMatches} total matches, use --limit all to see all)`
+          : '';
+        console.log(`Found ${totalMatches} block(s)${truncatedMsg}:\n`);
         for (const result of results) {
           console.log(`[${result.seqId}] (${result.type})`);
           console.log(`  ID: ${result.id}`);

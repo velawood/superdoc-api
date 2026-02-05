@@ -231,6 +231,8 @@ Find blocks by text content. Useful for locating block IDs when creating edits.
 node superdoc-redline.mjs find-block --input contract.docx --text "VAT"
 node superdoc-redline.mjs find-block --input contract-ir.json --regex "VAT|HMRC"
 node superdoc-redline.mjs find-block -i contract.docx -t "Business Day" -c 100
+node superdoc-redline.mjs find-block -i contract.docx -t "VAT" --limit 100
+node superdoc-redline.mjs find-block -i contract.docx -t "VAT" --limit all
 ```
 
 **Options:**
@@ -240,7 +242,9 @@ node superdoc-redline.mjs find-block -i contract.docx -t "Business Day" -c 100
 | `-t, --text <text>` | Text to search for (case-insensitive) |
 | `-r, --regex <pattern>` | Regex pattern to search for |
 | `-c, --context <chars>` | Context characters to show around match (default: 50) |
-| `--max-results <count>` | Maximum number of results (default: 20) |
+| `-l, --limit <n>` | Maximum results (default: 20, use "all" for unlimited) |
+
+**Note:** The default limit of 20 results may miss edits for high-frequency terms. For comprehensive discovery, use `--limit all`.
 
 **Example output:**
 ```

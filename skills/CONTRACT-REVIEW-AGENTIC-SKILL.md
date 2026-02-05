@@ -7,9 +7,9 @@ description: Orchestrator-subagent methodology for parallel contract review usin
 
 ## Overview
 
-This skill enables **multi-agent contract review** using an orchestrator-subagent architecture. The orchestrator coordinates multiple sub-agents working on different sections, then merges their edits.
+This skill enables **multi-agent contract review** using an orchestrator-subagent architecture. The orchestrator coordinates multiple work partitions working on different sections, then merges their edits.
 
-**Note:** In Claude Code, sub-agents execute **sequentially** (not in parallel). The workflow is the same, just not parallelized. The organizational benefits remain: clear separation of concerns, smaller focused edit files, and explicit merge/conflict handling.
+**Note:** In Claude Code, work partitions execute **sequentially** (not in parallel). The workflow is the same, just not parallelized. The organizational benefits remain: clear separation of concerns, smaller focused edit files, and explicit merge/conflict handling.
 
 **Prerequisites:** Familiarity with **CONTRACT-REVIEW-SKILL.md** (core methodology, edit formats, two-pass workflow).
 
@@ -22,9 +22,9 @@ This skill enables **multi-agent contract review** using an orchestrator-subagen
 | Document Size | Approach |
 |---------------|----------|
 | < 30K tokens | Single-agent may be sufficient |
-| 30K - 50K tokens | 2-3 sub-agents recommended for organizational clarity |
-| 50K - 150K tokens | 2-4 sub-agents |
-| > 150K tokens | 4-8 sub-agents |
+| 30K - 50K tokens | 2-3 work partitions recommended for organizational clarity |
+| 50K - 150K tokens | 2-4 work partitions |
+| > 150K tokens | 4-8 work partitions |
 
 **Note:** Multi-agent workflow provides benefits even for smaller documents:
 - Organizational clarity (separating definitions from warranties from schedules)
@@ -39,27 +39,27 @@ This skill enables **multi-agent contract review** using an orchestrator-subagen
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        ORCHESTRATOR AGENT                           │
 │  - Discovery Pass (read all chunks, build Context Document)         │
-│  - Work decomposition (assign block ranges to sub-agents)           │
+│  - Work decomposition (assign block ranges to work partitions)           │
 │  - Merge results and validate                                       │
 └─────────────────────────────────────────────────────────────────────┘
                                  │
                                  ▼
                     ┌─────────────────────────┐
-                    │     SUB-AGENT A         │
+                    │     WORK PARTITION A         │
                     │     b001-b300           │ ──► edits-a.json
                     │     (Definitions)       │
                     └─────────────────────────┘
                                  │
                                  ▼
                     ┌─────────────────────────┐
-                    │     SUB-AGENT B         │
+                    │     WORK PARTITION B         │
                     │     b301-b600           │ ──► edits-b.json
                     │     (Provisions)        │
                     └─────────────────────────┘
                                  │
                                  ▼
                     ┌─────────────────────────┐
-                    │     SUB-AGENT C         │
+                    │     WORK PARTITION C         │
                     │     b601-b900           │ ──► edits-c.json
                     │     (Warranties)        │
                     └─────────────────────────┘
@@ -71,13 +71,13 @@ This skill enables **multi-agent contract review** using an orchestrator-subagen
                     └─────────────────────────┘
 ```
 
-**Note:** In Claude Code, sub-agents execute sequentially as shown. The organizational structure provides the same benefits as parallel execution.
+**Note:** In Claude Code, work partitions execute sequentially as shown. The organizational structure provides the same benefits as parallel execution.
 
 ---
 
 ## Phase 1: Orchestrator Discovery
 
-The orchestrator completes a **full discovery pass** before spawning sub-agents.
+The orchestrator completes a **full discovery pass** before spawning work partitions.
 
 ### Step 1.1: Get Stats & Extract IR
 
@@ -224,7 +224,7 @@ This ignores clause type distribution and will miss edits when:
 
 ## Phase 3: Spawn Sub-Agents
 
-Each sub-agent receives:
+Each work partition receives:
 1. The **Context Document** (global context)
 2. Their **assigned block range**
 3. **Specific instructions**
@@ -232,7 +232,7 @@ Each sub-agent receives:
 ### Sub-Agent Prompt Template
 
 ```markdown
-You are a contract review sub-agent.
+You are a contract review work partition.
 
 ## Your Assignment
 - **Block Range**: b[START] to b[END]
@@ -271,7 +271,7 @@ Report: edit count, deletions made, compound terms changed, any issues.
 
 > **⚠️ Multi-Agent Workflow (February 2026)**
 >
-> Claude Code executes sub-agents **sequentially** (not in parallel). The organizational benefit is:
+> Claude Code executes work partitions **sequentially** (not in parallel). The organizational benefit is:
 > - Clear separation of concerns (definitions, provisions, warranties)
 > - Smaller, focused edit files easier to validate
 > - Merge command consolidates with conflict detection
@@ -293,7 +293,7 @@ Promise.all([
 ```
 
 **Empty Edit Files Are Valid:**
-If a sub-agent's block range contains no UK-specific content requiring changes, an empty edit file is acceptable. Core provisions (sale, consideration, completion) often use defined terms without directly citing statutes, so changes at the definition level handle the conversion.
+If a work partition's block range contains no UK-specific content requiring changes, an empty edit file is acceptable. Core provisions (sale, consideration, completion) often use defined terms without directly citing statutes, so changes at the definition level handle the conversion.
 
 ---
 
@@ -359,15 +359,15 @@ The apply command now validates `newText` for:
 ### Phase 1: Discovery
 - [ ] Get stats, extract IR
 - [ ] Read ALL chunks
-- [ ] Build Context Document with sub-agent assignments
+- [ ] Build Context Document with work partition assignments
 - [ ] Identify all DELETEs and assign to agents
 
 ### Phase 2: Decomposition
 - [ ] Define block ranges (non-overlapping)
-- [ ] Prepare sub-agent prompts
+- [ ] Prepare work partition prompts
 
 ### Phase 3: Spawn
-- [ ] Launch all sub-agents in parallel
+- [ ] Launch all work partitions in parallel
 - [ ] Each has Context Document + block range
 
 ### Phase 4: Collect
@@ -387,7 +387,7 @@ The apply command now validates `newText` for:
 
 ## Global Constraints
 
-Sub-agents must respect constraints from the Context Document:
+Work partitions must respect constraints from the Context Document:
 
 1. **Defined Terms Consistency** - Apply changes from "Terms to Change" table
 2. **Citation Format** - Use consistent format (e.g., Singapore statutes by year)
@@ -400,7 +400,7 @@ Sub-agents must respect constraints from the Context Document:
 
 | Issue | Resolution |
 |-------|------------|
-| Sub-agent timeout | Re-spawn with remaining range, or orchestrator processes directly |
+| Work partition timeout | Re-spawn with remaining range, or orchestrator processes directly |
 | Merge conflict | Review both edits, use appropriate conflict strategy |
 | Validation failure | Fix problematic edits (invalid blockId, etc.), re-validate |
 
@@ -430,22 +430,76 @@ Sub-agents must respect constraints from the Context Document:
 ```
 
 **2. Limit Sub-Agent Context**
-Sub-agents receive only:
+Work partitions receive only:
 - Their assigned block range
 - Term mappings relevant to that range
 - NOT the full Context Document with all 14 chunks summarized
 
 **3. For Documents >100K Tokens**
-Consider running orchestrator and sub-agents as separate sessions to avoid context accumulation.
+Consider running orchestrator and work partitions as separate sessions to avoid context accumulation.
 
 ---
 
 ## Performance Tips
 
-- In environments with parallel task support, spawn ALL sub-agents simultaneously
+- In environments with parallel task support, spawn ALL work partitions simultaneously
 - Use 10K token chunks for thorough review
 - Markdown format for large edit sets (more reliable than JSON)
-- For very large documents, consider batching sub-agent prompts to avoid context limits
+- For very large documents, consider batching work partition prompts to avoid context limits
+
+---
+
+## Expected Edit Ranges (UK-to-Singapore Conversion)
+
+| Document Type | Blocks | Expected Edits | Notes |
+|--------------|--------|----------------|-------|
+| Asset Purchase Agreement | 1000-1500 | 60-100 | Definitions, warranties, schedules |
+| Share Purchase Agreement | 800-1200 | 50-80 | Similar to APA |
+| Employment Contract | 200-400 | 15-30 | TUPE, PAYE/CPF focus |
+| Lease Agreement | 500-800 | 30-50 | Property law focus |
+
+**Coverage Indicators:**
+- < 40 edits for 1000+ block document: Likely incomplete discovery
+- > 80 edits: Comprehensive coverage
+- 105+ edits: Exhaustive (every term instance changed)
+
+**Key:** More time in discovery phase = higher edit counts.
+
+---
+
+## Discovery Phase Checklist
+
+**Before creating ANY edits, the discovery pass MUST complete:**
+
+- [ ] All chunks read (not just first few)
+- [ ] All defined terms listed with block IDs
+- [ ] All UK statutes mapped to Singapore equivalents
+- [ ] All regulatory body names identified
+- [ ] Schedule-by-schedule review completed
+- [ ] Clause location map built (clause types → block ranges)
+
+**Agent C (Schedules/Warranties) typically has 40-60% of all edits.** Under-investment in schedule discovery is the primary cause of low edit counts.
+
+---
+
+## Buffer Zones vs Non-Overlapping Assignments
+
+**Buffer zones are for DISCOVERY only** - knowing what's in adjacent sections.
+
+**Final edit files must have NON-OVERLAPPING block assignments:**
+- Use `-c error` during merge to catch accidental overlaps
+- If conflict detected, one agent removes their edit for that block
+
+**Example:**
+```markdown
+### Agent A: Definitions
+- Discovery range: b001-b320 (includes buffer)
+- Edit range: b001-b300 (strict, no overlap)
+
+### Agent B: Provisions
+- Discovery range: b280-b620 (includes buffer)
+- Edit range: b301-b600 (strict, no overlap)
+```
 
 ---
 
@@ -471,7 +525,7 @@ Consider running orchestrator and sub-agents as separate sessions to avoid conte
 
 ### 4 February 2026 - Asset Purchase Agreement
 
-**Key insight:** The single-agent approach worked well for this 143K token document. Sub-agents would help for documents >200K tokens or when multiple reviewers need to work in parallel.
+**Key insight:** The single-agent approach worked well for this 143K token document. Work partitions would help for documents >200K tokens or when multiple reviewers need to work in parallel.
 
 **Shared learnings** (edit format, block ID confusion, etc.) documented in CONTRACT-REVIEW-SKILL.md.
 

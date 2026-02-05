@@ -256,6 +256,14 @@ node superdoc-redline.mjs apply \
 
 Search output for residual terms that should have been changed. If found, create additional edits and re-apply.
 
+**Important:** When using track changes mode, post-apply verification via grep/find-block will find ALL original terms because deleted text is preserved. This is expected behavior.
+
+**To verify completeness:**
+1. Open amended document in Word
+2. Accept all changes (Review > Accept All)
+3. Search for residual UK terms
+4. OR use grep/find-block understanding that matches include deleted content
+
 #### Coverage Verification (Recommended)
 
 For comprehensive reviews, verify coverage by counting term occurrences:
@@ -515,7 +523,15 @@ node superdoc-redline.mjs find-block --input contract.docx --regex "VAT|HMRC"
 
 # Search in already-extracted IR (faster for multiple searches)
 node superdoc-redline.mjs find-block --input contract-ir.json --text "VAT"
+
+# Show more results (default is 20)
+node superdoc-redline.mjs find-block --input contract.docx --text "VAT" --limit 100
+
+# Show ALL matches (for comprehensive coverage)
+node superdoc-redline.mjs find-block --input contract.docx --text "VAT" --limit all
 ```
+
+**Note:** The default limit of 20 results can miss edits for high-frequency terms. For comprehensive discovery, use `--limit all` to see all occurrences.
 
 Alternatively, use grep or jq on the IR file:
 ```bash
@@ -534,6 +550,58 @@ For detailed mappings when converting between jurisdictions, see:
 - Internal reference (not published): `tests_and_others/reference/uk-to-singapore.md`
 
 Create similar reference files for other jurisdiction pairs as needed.
+
+---
+
+## UK-to-Singapore: Key Conversions
+
+### Statute Mappings
+
+| UK Statute/Concept | Singapore Equivalent | Notes |
+|-------------------|---------------------|-------|
+| Insolvency Act 1986 | IRDA 2018 (Insolvency, Restructuring and Dissolution Act) | Administrator → Judicial Manager |
+| Working Time Regulations 1998 | Employment Act (Cap 91) | |
+| DPA 1998 | PDPA 2012 | Data Protection Act → Personal Data Protection Act |
+| Equality Act 2010 | Employment Act (Cap 91) | Singapore has limited anti-discrimination law |
+| Finance Act (SDLT) | Stamp Duties Act (Cap 312) | SDLT → Stamp Duty |
+| UK Pension Schemes (Finance Act 2004) | CPF Act | HMRC registration → CPF Board |
+| VAT Special Provisions Order 1995 (TOGC) | GST Act s10(1)(b) | Transfer of going concern |
+| PAYE / National Insurance | CPF contributions | |
+| EU Merger Control | DELETE (or Singapore Competition Act) | Singapore not in EU |
+| Land Registry | Singapore Land Authority (SLA) | |
+| Caution against first registration | Caveat (Land Titles Act) | |
+| Local land charges | Caveats/encumbrances (SLA) | |
+| Capital Allowances Act 2001 | Income Tax Act (Cap 134) | |
+| FRS 102 | SFRS(I) | Singapore Financial Reporting Standards |
+
+### Regulatory Body Mappings
+
+| UK Body | Singapore Body | Full Name |
+|---------|---------------|-----------|
+| HMRC | IRAS | Inland Revenue Authority of Singapore |
+| Competition Commission | CCCS | Competition and Consumer Commission of Singapore |
+| Environment Agency | NEA | National Environment Agency |
+| Land Registry | SLA | Singapore Land Authority |
+| ICAEW | ISCA | Institute of Singapore Chartered Accountants |
+
+### TUPE Replacement (Employment Transfer)
+
+UK TUPE provides automatic transfer of employment. Singapore has NO equivalent - transfers require consent.
+
+**UK TUPE (automatic transfer):**
+```
+The Employees shall transfer automatically to the Buyer on the Transfer Date
+pursuant to the Transfer of Undertakings (Protection of Employment) Regulations 2006.
+```
+
+**Singapore (consent-based transfer):**
+```
+The transfer of each Employee to the Buyer shall be conditional upon:
+(a) the Employee's written consent to such transfer; and
+(b) the Buyer's agreement to employ the Employee on terms no less favourable
+than those provided by the Seller immediately prior to the Transfer Date.
+The Seller shall use reasonable endeavours to procure each Employee's consent.
+```
 
 ---
 
