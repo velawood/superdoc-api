@@ -42,21 +42,21 @@ This skill enables **multi-agent contract review** using an orchestrator-subagen
                                  ▼
                     ┌─────────────────────────┐
                     │     WORK PARTITION A    │
-                    │     b001-b300           │ ──► edits-a.json
+                    │     b001-b300           │ ──► edits-a.md
                     │     (Definitions)       │
                     └─────────────────────────┘
                                  │
                                  ▼
                     ┌─────────────────────────┐
                     │     WORK PARTITION B    │
-                    │     b301-b600           │ ──► edits-b.json
+                    │     b301-b600           │ ──► edits-b.md
                     │     (Provisions)        │
                     └─────────────────────────┘
                                  │
                                  ▼
                     ┌─────────────────────────┐
                     │     WORK PARTITION C    │
-                    │     b601-b900           │ ──► edits-c.json
+                    │     b601-b900           │ ──► edits-c.md
                     │     (Warranties)        │
                     └─────────────────────────┘
                                  │
@@ -142,17 +142,17 @@ Then assign partitions by **clause type grouping**, not sequential ranges:
 ### Partition A: Definitions & Terms
 - Blocks: b001-b300
 - Also: Any blocks referencing defined terms
-- Output: edits-definitions.json
+- Output: edits-definitions.md
 
 ### Partition B: Jurisdiction-Sensitive Clauses
 - Blocks: b651, b658, b680-b695, b1100-b1150
 - Includes: Governing law, jurisdiction, service of process
-- Output: edits-jurisdiction.json
+- Output: edits-jurisdiction.md
 
 ### Partition C: Employment & Related
 - Blocks: b450-b480, b720-b750
 - Includes: Employment provisions wherever they appear
-- Output: edits-employment.json
+- Output: edits-employment.md
 ```
 
 ### Assignment Strategies
@@ -210,7 +210,7 @@ You are a contract review work partition.
 ## Your Assignment
 - **Block Range**: b[START] to b[END]
 - **Section**: [SECTION NAME]
-- **Output File**: edits-[section].json
+- **Output File**: edits-[section].md
 
 ## Context Document
 [PASTE FULL CONTEXT DOCUMENT]
@@ -229,7 +229,7 @@ You are a contract review work partition.
 
 5. Check "Compound Defined Terms" - change these in your range.
 
-6. Create edits file (markdown or JSON format).
+6. Create edits file in **markdown format** (recommended for resilience).
 
 7. Before finalizing, verify:
    - [ ] All DELETEs in my range created
@@ -244,9 +244,9 @@ Report: edit count, deletions made, compound terms changed, any issues.
 
 Work partitions execute sequentially:
 
-1. Work on Partition A's block range → create `edits-definitions.json`
-2. Work on Partition B's block range → create `edits-provisions.json`
-3. Work on Partition C's block range → create `edits-warranties.json`
+1. Work on Partition A's block range → create `edits-definitions.md`
+2. Work on Partition B's block range → create `edits-provisions.md`
+3. Work on Partition C's block range → create `edits-warranties.md`
 4. Merge all files together
 
 **Empty Edit Files Are Valid:** If a work partition's block range contains no content requiring changes, an empty edit file is acceptable.
@@ -258,14 +258,14 @@ Work partitions execute sequentially:
 ### Step 4.1: Collect Edit Files
 
 ```bash
-ls edits-*.json
+ls edits-*.md
 ```
 
 ### Step 4.2: Merge
 
 ```bash
 node superdoc-redline.mjs merge \
-  edits-definitions.json edits-provisions.json edits-warranties.json \
+  edits-definitions.md edits-provisions.md edits-warranties.md \
   -o merged-edits.json \
   -c error \
   -v contract.docx
