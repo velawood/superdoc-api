@@ -293,140 +293,142 @@ export async function applyEdits(inputPath, outputPath, editConfig, options = {}
 
   // Step 1: Load document and create editor
   const buffer = await readFile(inputPath);
-  const editor = await createHeadlessEditor(buffer, {
+  const { editor, cleanup } = await createHeadlessEditor(buffer, {
     documentMode: trackChanges ? 'suggesting' : 'editing',
     user: author
   });
 
-  // Step 2: Extract current IR for position resolution
-  const ir = extractDocumentIRFromEditor(editor);
+  try {
+    // Step 2: Extract current IR for position resolution
+    const ir = extractDocumentIRFromEditor(editor);
 
-  // Step 3: Validate edits if requested
-  let editsToApply = [...editConfig.edits];
+    // Step 3: Validate edits if requested
+    let editsToApply = [...editConfig.edits];
 
-  if (validateFirst) {
-    const validation = validateEditsAgainstIR(editsToApply, ir, {
-      warnOnTruncation: true,
-      allowReduction
-    });
+    if (validateFirst) {
+      const validation = validateEditsAgainstIR(editsToApply, ir, {
+        warnOnTruncation: true,
+        allowReduction
+      });
 
-    // Collect warnings
-    if (validation.warnings && validation.warnings.length > 0) {
-      for (const warn of validation.warnings) {
-        results.warnings.push({
-          editIndex: warn.editIndex,
-          blockId: warn.blockId,
-          message: warn.message
-        });
+      // Collect warnings
+      if (validation.warnings && validation.warnings.length > 0) {
+        for (const warn of validation.warnings) {
+          results.warnings.push({
+            editIndex: warn.editIndex,
+            blockId: warn.blockId,
+            message: warn.message
+          });
+        }
+      }
+
+      // In strict mode, treat warnings as errors
+      if (strict && validation.warnings && validation.warnings.length > 0) {
+        for (const warn of validation.warnings) {
+          validation.issues.push({
+            editIndex: warn.editIndex,
+            type: 'content_warning_strict',
+            blockId: warn.blockId,
+            message: `[STRICT] ${warn.message}`
+          });
+        }
+      }
+
+      // Handle validation issues (including strict mode warnings added above)
+      if (validation.issues.length > 0) {
+        // Add validation failures to skipped
+        for (const issue of validation.issues) {
+          results.skipped.push({
+            index: issue.editIndex,
+            blockId: issue.blockId,
+            reason: issue.message
+          });
+        }
+        // Filter out invalid edits - valid edits will still be applied
+        const invalidIndices = new Set(validation.issues.map(i => i.editIndex));
+        editsToApply = editsToApply.filter((_, i) => !invalidIndices.has(i));
+        // Note: We continue to apply valid edits; success will be set to false at the end
+        // The skipInvalid flag only affects CLI exit code, not whether valid edits are applied
       }
     }
 
-    // In strict mode, treat warnings as errors
-    if (strict && validation.warnings && validation.warnings.length > 0) {
-      for (const warn of validation.warnings) {
-        validation.issues.push({
-          editIndex: warn.editIndex,
-          type: 'content_warning_strict',
-          blockId: warn.blockId,
-          message: `[STRICT] ${warn.message}`
-        });
-      }
+    // Step 4: Sort edits for safe application (descending by position)
+    if (sortEdits) {
+      editsToApply = sortEditsForApplication(editsToApply, ir);
     }
 
-    // Handle validation issues (including strict mode warnings added above)
-    if (validation.issues.length > 0) {
-      // Add validation failures to skipped
-      for (const issue of validation.issues) {
+    // Step 5: Apply each edit
+    for (let i = 0; i < editsToApply.length; i++) {
+      const edit = editsToApply[i];
+      const editResult = await applyOneEdit(editor, edit, author, results.comments, ir, { verbose });
+
+      if (editResult.success) {
+        results.applied++;
+        results.details.push({
+          index: i,
+          blockId: edit.blockId || edit.afterBlockId,
+          operation: edit.operation,
+          ...editResult.details
+        });
+      } else {
         results.skipped.push({
-          index: issue.editIndex,
-          blockId: issue.blockId,
-          reason: issue.message
+          index: i,
+          blockId: edit.blockId || edit.afterBlockId,
+          operation: edit.operation,
+          reason: editResult.error
         });
       }
-      // Filter out invalid edits - valid edits will still be applied
-      const invalidIndices = new Set(validation.issues.map(i => i.editIndex));
-      editsToApply = editsToApply.filter((_, i) => !invalidIndices.has(i));
-      // Note: We continue to apply valid edits; success will be set to false at the end
-      // The skipInvalid flag only affects CLI exit code, not whether valid edits are applied
     }
-  }
 
-  // Step 4: Sort edits for safe application (descending by position)
-  if (sortEdits) {
-    editsToApply = sortEditsForApplication(editsToApply, ir);
-  }
+    // Step 6: Export the document
+    const exportOptions = {
+      isFinalDoc: false,
+      commentsType: 'external',
+    };
 
-  // Step 5: Apply each edit
-  for (let i = 0; i < editsToApply.length; i++) {
-    const edit = editsToApply[i];
-    const editResult = await applyOneEdit(editor, edit, author, results.comments, ir, { verbose });
-
-    if (editResult.success) {
-      results.applied++;
-      results.details.push({
-        index: i,
-        blockId: edit.blockId || edit.afterBlockId,
-        operation: edit.operation,
-        ...editResult.details
-      });
-    } else {
-      results.skipped.push({
-        index: i,
-        blockId: edit.blockId || edit.afterBlockId,
-        operation: edit.operation,
-        reason: editResult.error
-      });
+    if (results.comments.length > 0) {
+      exportOptions.comments = results.comments;
     }
-  }
 
-  // Step 6: Export the document
-  const exportOptions = {
-    isFinalDoc: false,
-    commentsType: 'external',
-  };
-
-  if (results.comments.length > 0) {
-    exportOptions.comments = results.comments;
-  }
-
-  // Step 6.5: Reset cursor position and suppress TextSelection warning
-  // ProseMirror warns when the selection points to an invalid position after bulk edits.
-  // This warning is benign and doesn't affect document output, but confuses users.
-  try {
-    if (editor.commands && editor.commands.setTextSelection) {
-      editor.commands.setTextSelection(1);
-    } else if (editor.commands && editor.commands.blur) {
-      editor.commands.blur();
+    // Step 6.5: Reset cursor position and suppress TextSelection warning
+    // ProseMirror warns when the selection points to an invalid position after bulk edits.
+    // This warning is benign and doesn't affect document output, but confuses users.
+    try {
+      if (editor.commands && editor.commands.setTextSelection) {
+        editor.commands.setTextSelection(1);
+      } else if (editor.commands && editor.commands.blur) {
+        editor.commands.blur();
+      }
+    } catch (e) {
+      // Ignore selection errors - they don't affect document output
     }
-  } catch (e) {
-    // Ignore selection errors - they don't affect document output
-  }
 
-  // Temporarily suppress the specific TextSelection warning during export
-  const originalWarn = console.warn;
-  console.warn = (...args) => {
-    const msg = args[0]?.toString() || '';
-    if (msg.includes('TextSelection endpoint not pointing into a node with inline content')) {
-      // Suppress this specific benign warning
-      return;
+    // Temporarily suppress the specific TextSelection warning during export
+    const originalWarn = console.warn;
+    console.warn = (...args) => {
+      const msg = args[0]?.toString() || '';
+      if (msg.includes('TextSelection endpoint not pointing into a node with inline content')) {
+        // Suppress this specific benign warning
+        return;
+      }
+      originalWarn.apply(console, args);
+    };
+
+    let exportedBuffer;
+    try {
+      exportedBuffer = await editor.exportDocx(exportOptions);
+    } finally {
+      // Always restore console.warn
+      console.warn = originalWarn;
     }
-    originalWarn.apply(console, args);
-  };
+    await writeFile(outputPath, Buffer.from(exportedBuffer));
 
-  let exportedBuffer;
-  try {
-    exportedBuffer = await editor.exportDocx(exportOptions);
+    results.success = results.skipped.length === 0;
+    return results;
   } finally {
-    // Always restore console.warn
-    console.warn = originalWarn;
+    // Step 7: Cleanup
+    cleanup();
   }
-  await writeFile(outputPath, Buffer.from(exportedBuffer));
-
-  // Step 7: Cleanup
-  editor.destroy();
-
-  results.success = results.skipped.length === 0;
-  return results;
 }
 
 /**
@@ -624,11 +626,13 @@ async function applyOneEdit(editor, edit, author, commentsStore, ir, options = {
  */
 export async function validateEdits(inputPath, editConfig) {
   const buffer = await readFile(inputPath);
-  const editor = await createHeadlessEditor(buffer);
-  const ir = extractDocumentIRFromEditor(editor);
-  editor.destroy();
-
-  return validateEditsAgainstIR(editConfig.edits, ir);
+  const { editor, cleanup } = await createHeadlessEditor(buffer);
+  try {
+    const ir = extractDocumentIRFromEditor(editor);
+    return validateEditsAgainstIR(editConfig.edits, ir);
+  } finally {
+    cleanup();
+  }
 }
 
 /**
@@ -851,7 +855,7 @@ export async function loadDocumentForEditing(inputPath, options = {}) {
   } = options;
 
   const buffer = await readFile(inputPath);
-  const editor = await createHeadlessEditor(buffer, {
+  const { editor, cleanup } = await createHeadlessEditor(buffer, {
     documentMode: trackChanges ? 'suggesting' : 'editing',
     user: author
   });
@@ -861,7 +865,7 @@ export async function loadDocumentForEditing(inputPath, options = {}) {
   return {
     editor,
     ir,
-    cleanup: () => editor.destroy()
+    cleanup
   };
 }
 

@@ -4,8 +4,11 @@ import bearerAuth from "@fastify/bearer-auth";
 import requestIdPlugin from "./plugins/request-id.mjs";
 import errorHandlerPlugin from "./plugins/error-handler.mjs";
 import multipartPlugin from "./plugins/multipart.mjs";
+import concurrencyLimiterPlugin from "./plugins/concurrency-limiter.mjs";
+import resourceCleanupPlugin from "./plugins/resource-cleanup.mjs";
 import healthRoutes from "./routes/health.mjs";
 import readRoutes from "./routes/read.mjs";
+import applyRoutes from "./routes/apply.mjs";
 
 /**
  * Build and return a configured Fastify application instance.
@@ -31,6 +34,8 @@ export default function buildApp(opts = {}) {
   app.register(requestIdPlugin);
   app.register(errorHandlerPlugin);
   app.register(multipartPlugin);
+  app.register(concurrencyLimiterPlugin);
+  app.register(resourceCleanupPlugin);
 
   // Health at root level (for infrastructure probes)
   app.register(healthRoutes);
@@ -56,6 +61,7 @@ export default function buildApp(opts = {}) {
 
     scope.register(healthRoutes);
     scope.register(readRoutes);
+    scope.register(applyRoutes);
   }, { prefix: "/v1" });
 
   return app;

@@ -37,42 +37,44 @@ export async function extractDocumentIR(inputPath, options = {}) {
 
   // 1. Load document
   const buffer = await readFile(inputPath);
-  const editor = await createHeadlessEditor(buffer);
+  const { editor, cleanup } = await createHeadlessEditor(buffer);
   const idManager = createIdManager();
 
-  // 2. Assign IDs to blocks
-  const idsAssigned = assignBlockIds(editor, idManager);
+  try {
+    // 2. Assign IDs to blocks
+    const idsAssigned = assignBlockIds(editor, idManager);
 
-  // 3. Extract blocks
-  const blocks = extractBlocks(editor, idManager, { maxTextLength });
+    // 3. Extract blocks
+    const blocks = extractBlocks(editor, idManager, { maxTextLength });
 
-  // 4. Build outline (if requested)
-  const outline = includeOutline ? buildOutline(blocks) : undefined;
+    // 4. Build outline (if requested)
+    const outline = includeOutline ? buildOutline(blocks) : undefined;
 
-  // 5. Extract defined terms (if requested)
-  const definedTerms = includeDefinedTerms ? extractDefinedTerms(blocks) : undefined;
+    // 5. Extract defined terms (if requested)
+    const definedTerms = includeDefinedTerms ? extractDefinedTerms(blocks) : undefined;
 
-  // 6. Build result
-  const result = {
-    metadata: {
-      filename: inputPath.split('/').pop(),
-      generated: new Date().toISOString(),
-      version: '0.2.0',
-      blockCount: blocks.length,
-      format: format,
-      idsAssigned: idsAssigned
-    },
-    blocks: blocks,
-    idMapping: idManager.exportMapping()
-  };
+    // 6. Build result
+    const result = {
+      metadata: {
+        filename: inputPath.split('/').pop(),
+        generated: new Date().toISOString(),
+        version: '0.2.0',
+        blockCount: blocks.length,
+        format: format,
+        idsAssigned: idsAssigned
+      },
+      blocks: blocks,
+      idMapping: idManager.exportMapping()
+    };
 
-  if (outline) result.outline = outline;
-  if (definedTerms && Object.keys(definedTerms).length > 0) result.definedTerms = definedTerms;
+    if (outline) result.outline = outline;
+    if (definedTerms && Object.keys(definedTerms).length > 0) result.definedTerms = definedTerms;
 
-  // 7. Cleanup
-  editor.destroy();
-
-  return result;
+    return result;
+  } finally {
+    // 7. Cleanup
+    cleanup();
+  }
 }
 
 /**
@@ -324,33 +326,35 @@ export async function extractDocumentIRFromBuffer(buffer, filename = 'document.d
     maxTextLength = null
   } = options;
 
-  const editor = await createHeadlessEditor(buffer);
+  const { editor, cleanup } = await createHeadlessEditor(buffer);
   const idManager = createIdManager();
 
-  const idsAssigned = assignBlockIds(editor, idManager);
-  const blocks = extractBlocks(editor, idManager, { maxTextLength });
-  const outline = includeOutline ? buildOutline(blocks) : undefined;
-  const definedTerms = includeDefinedTerms ? extractDefinedTerms(blocks) : undefined;
+  try {
+    const idsAssigned = assignBlockIds(editor, idManager);
+    const blocks = extractBlocks(editor, idManager, { maxTextLength });
+    const outline = includeOutline ? buildOutline(blocks) : undefined;
+    const definedTerms = includeDefinedTerms ? extractDefinedTerms(blocks) : undefined;
 
-  const result = {
-    metadata: {
-      filename: filename,
-      generated: new Date().toISOString(),
-      version: '0.2.0',
-      blockCount: blocks.length,
-      format: format,
-      idsAssigned: idsAssigned
-    },
-    blocks: blocks,
-    idMapping: idManager.exportMapping()
-  };
+    const result = {
+      metadata: {
+        filename: filename,
+        generated: new Date().toISOString(),
+        version: '0.2.0',
+        blockCount: blocks.length,
+        format: format,
+        idsAssigned: idsAssigned
+      },
+      blocks: blocks,
+      idMapping: idManager.exportMapping()
+    };
 
-  if (outline) result.outline = outline;
-  if (definedTerms && Object.keys(definedTerms).length > 0) result.definedTerms = definedTerms;
+    if (outline) result.outline = outline;
+    if (definedTerms && Object.keys(definedTerms).length > 0) result.definedTerms = definedTerms;
 
-  editor.destroy();
-
-  return result;
+    return result;
+  } finally {
+    cleanup();
+  }
 }
 
 /**
@@ -407,12 +411,12 @@ export function extractIRFromEditor(editor, filename = 'document.docx', options 
  */
 export async function createEditorWithIR(inputPath, options = {}) {
   const buffer = await readFile(inputPath);
-  const editor = await createHeadlessEditor(buffer);
+  const { editor, cleanup } = await createHeadlessEditor(buffer);
   const ir = extractIRFromEditor(editor, inputPath.split('/').pop(), options);
 
   return {
     ir,
     editor,
-    cleanup: () => editor.destroy()
+    cleanup
   };
 }

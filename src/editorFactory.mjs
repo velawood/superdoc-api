@@ -13,7 +13,7 @@ import { readFile } from 'fs/promises';
  *
  * @param {Buffer} buffer - DOCX file buffer
  * @param {EditorOptions} options - Configuration options
- * @returns {Promise<Editor>}
+ * @returns {Promise<HeadlessEditorResult>}
  *
  * @typedef {Object} EditorOptions
  * @property {'editing'|'suggesting'} documentMode - Edit mode (default: 'editing')
@@ -22,6 +22,13 @@ import { readFile } from 'fs/promises';
  * @typedef {Object} Author
  * @property {string} name - Author name
  * @property {string} email - Author email
+ *
+ * @typedef {Object} HeadlessEditorResult
+ * @property {Editor} editor - SuperDoc editor instance
+ * @property {CleanupFn} cleanup - Idempotent cleanup function that destroys the editor
+ *   and asynchronously closes the JSDOM window via setImmediate()
+ *
+ * @typedef {() => void} CleanupFn
  */
 export async function createHeadlessEditor(buffer, options = {}) {
   const {
@@ -33,27 +40,60 @@ export async function createHeadlessEditor(buffer, options = {}) {
   const { window } = new JSDOM('<!DOCTYPE html><html><body></body></html>');
   const { document } = window;
 
-  // Load DOCX content using SuperDoc's static method
-  const [content, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
+  let editor;
+  try {
+    // Load DOCX content using SuperDoc's static method
+    const [content, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
 
-  // Create the editor instance
-  const editor = new Editor({
-    mode: 'docx',
-    documentMode: documentMode,
-    documentId: 'doc-' + Date.now(),
-    element: document.createElement('div'),
-    extensions: getStarterExtensions(),
-    fileSource: buffer,
-    content,
-    media,
-    mediaFiles,
-    fonts,
-    isHeadless: true,
-    document: document,
-    user: user,
-  });
+    // Create the editor instance
+    editor = new Editor({
+      mode: 'docx',
+      documentMode: documentMode,
+      documentId: 'doc-' + Date.now(),
+      element: document.createElement('div'),
+      extensions: getStarterExtensions(),
+      fileSource: buffer,
+      content,
+      media,
+      mediaFiles,
+      fonts,
+      isHeadless: true,
+      document: document,
+      user: user,
+    });
+  } catch (error) {
+    try {
+      window.close();
+    } catch (closeError) {
+      // No-op: window may already be closed
+    }
+    throw error;
+  }
 
-  return editor;
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) {
+      return;
+    }
+    cleanedUp = true;
+
+    try {
+      editor.destroy();
+    } catch (destroyError) {
+      // No-op: editor may already be destroyed
+    }
+
+    // Defer window close to avoid JSDOM retention issues.
+    setImmediate(() => {
+      try {
+        window.close();
+      } catch (closeError) {
+        // No-op: window may already be closed
+      }
+    });
+  };
+
+  return { editor, cleanup };
 }
 
 /**
@@ -61,7 +101,7 @@ export async function createHeadlessEditor(buffer, options = {}) {
  *
  * @param {string} filePath - Path to DOCX file
  * @param {EditorOptions} options - Configuration options
- * @returns {Promise<Editor>}
+ * @returns {Promise<HeadlessEditorResult>}
  */
 export async function createEditorFromFile(filePath, options = {}) {
   const buffer = await readFile(filePath);
@@ -73,7 +113,7 @@ export async function createEditorFromFile(filePath, options = {}) {
  *
  * @param {string} filePath - Path to DOCX file
  * @param {Author} user - Author info for track changes
- * @returns {Promise<Editor>}
+ * @returns {Promise<HeadlessEditorResult>}
  */
 export async function createSuggestingEditor(filePath, user) {
   return createEditorFromFile(filePath, {

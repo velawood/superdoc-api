@@ -1,4 +1,5 @@
-import { extractDocumentIRFromBuffer } from "../irExtractor.mjs";
+import { createHeadlessEditor } from "../editorFactory.mjs";
+import { extractIRFromEditor } from "../irExtractor.mjs";
 import { validateMagicBytes, checkZipBomb } from "../validation/file-upload.mjs";
 import { requireMultipart } from "../hooks/content-type-check.mjs";
 
@@ -12,8 +13,9 @@ import { requireMultipart } from "../hooks/content-type-check.mjs";
  * 2. Extract uploaded file from request
  * 3. Validate ZIP magic bytes (DOCX files are ZIP archives)
  * 4. Check for zip bomb attacks
- * 5. Extract document IR using extractDocumentIRFromBuffer
- * 6. Return full IR as JSON (blocks, outline, definedTerms, idMapping)
+ * 5. Acquire semaphore and create headless editor
+ * 6. Extract document IR from editor
+ * 7. Return full IR as JSON (blocks, outline, definedTerms, idMapping)
  *
  * Error responses follow established format: { error: { code, message, details } }
  *
@@ -70,15 +72,40 @@ async function readRoutes(fastify, opts) {
       });
     }
 
-    // Step 5: Extract document IR
-    let ir;
+    // Step 5: Acquire semaphore before editor creation
+    await fastify.documentSemaphore.acquire();
+
+    // Step 6: Extract document IR with explicit editor lifecycle handling
+    let cleanup = null;
     try {
-      ir = await extractDocumentIRFromBuffer(buffer, filename, {
+      const { editor, cleanup: editorCleanup } = await createHeadlessEditor(buffer);
+      cleanup = editorCleanup;
+      request.editorCleanup = editorCleanup;
+
+      const ir = extractIRFromEditor(editor, filename, {
         format: "full",
         includeDefinedTerms: true,
         includeOutline: true,
       });
+
+      // Step 7: Return IR as JSON. onResponse hook performs cleanup + release.
+      return reply.type("application/json").send(ir);
     } catch (error) {
+      if (cleanup) {
+        try {
+          cleanup();
+        } catch (cleanupError) {
+          request.log.warn({ err: cleanupError, filename }, "Immediate editor cleanup failed");
+        }
+      }
+
+      try {
+        fastify.documentSemaphore.release();
+      } catch (releaseError) {
+        request.log.warn({ err: releaseError }, "Failed to release document semaphore");
+      }
+
+      request.editorCleanup = null;
       request.log.error({ err: error, filename }, "Document extraction failed");
       return reply.status(422).send({
         error: {
@@ -88,9 +115,6 @@ async function readRoutes(fastify, opts) {
         },
       });
     }
-
-    // Step 6: Return IR as JSON
-    return reply.type("application/json").send(ir);
   });
 }
 
