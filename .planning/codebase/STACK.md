@@ -14,7 +14,7 @@
 ## Runtime
 
 **Environment:**
-- Node.js 18+ (as specified in `package.json` engines)
+- Node.js 20+ (as specified in `package.json` engines, required by Fastify 5)
 
 **Package Manager:**
 - npm
@@ -23,6 +23,7 @@
 ## Frameworks
 
 **Core:**
+- Fastify - `fastify@^5.7.4` - HTTP server framework with built-in JSON schema validation, Pino logging, and plugin architecture
 - SuperDoc Editor - `@harbour-enterprises/superdoc@^1.0.0` - Headless DOCX document editing and manipulation
 - Commander.js - `commander@^12.0.0` - CLI command-line interface and argument parsing
 
@@ -45,13 +46,22 @@
 - `unzipper@^0.12.3` - ZIP extraction for reading DOCX file contents
 - `fs/promises` - Built-in Node.js filesystem API for async file I/O
 
+**HTTP Server:**
+- `fastify@^5.7.4` - HTTP framework with routing, validation, and structured logging via Pino
+- `fastify-plugin@^5.0.4` - Plugin wrapper for non-encapsulated Fastify plugins (global hooks/handlers)
+
 **Utility:**
 - `commander@^12.0.0` - CLI framework for command parsing and option handling
+
+**Dev Only:**
+- `pino-pretty@^13.1.3` - Human-readable log formatting for development
 
 ## Configuration
 
 **Environment:**
-- No environment variables required for core functionality
+- `PORT` - HTTP server port (default: 3000)
+- `LOG_LEVEL` - Pino log level (default: "info")
+- No other environment variables required for core functionality
 - File-based configuration only (DOCX input files, edits JSON files)
 - Optional author/user configuration passed programmatically or via CLI options
 
@@ -73,15 +83,15 @@
 ## Platform Requirements
 
 **Development:**
-- Node.js 18.0.0 or higher
+- Node.js 20.0.0 or higher
 - npm or compatible package manager
 - DOCX files for testing
 
 **Production:**
-- Node.js 18.0.0 or higher (headless server/container)
+- Node.js 20.0.0 or higher (headless server/container)
 - Read/write access to filesystem for DOCX file operations
 - No external services or APIs required
-- Typical deployment: Cloud functions, Lambda, container, or CLI tool in CI/CD
+- Typical deployment: Long-running HTTP server (container, VM, PaaS)
 
 ---
 

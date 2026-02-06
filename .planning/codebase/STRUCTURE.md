@@ -12,6 +12,13 @@ superdoc-api/
 ├── SKILL.md                    # AI agent task guide
 ├── LICENSE                     # Apache 2.0 license
 ├── src/                        # Core library modules
+│   ├── app.mjs                 # Fastify app factory (buildApp)
+│   ├── server.mjs              # Server entry point (listen)
+│   ├── routes/
+│   │   └── health.mjs          # GET /health route handler
+│   ├── plugins/
+│   │   ├── request-id.mjs      # X-Request-Id onSend hook
+│   │   └── error-handler.mjs   # Structured error/404 handlers
 │   ├── editorFactory.mjs       # Headless SuperDoc editor creation
 │   ├── irExtractor.mjs         # Extract IR from DOCX
 │   ├── idManager.mjs           # UUID ↔ seqId mapping
@@ -65,6 +72,8 @@ superdoc-api/
 ## Key File Locations
 
 **Entry Points:**
+- `src/server.mjs`: HTTP server entry point (Fastify, port 3000)
+- `src/app.mjs`: App factory for server and test use (buildApp)
 - `superdoc-redline.mjs`: Main CLI dispatcher, command handlers, argument parsing (450+ lines)
 
 **Configuration:**
@@ -170,7 +179,7 @@ superdoc-api/
 - Purpose: Dependencies (gitignored)
 - Generated: Yes (via npm install)
 - Committed: No
-- Key deps: `@harbour-enterprises/superdoc`, `commander`, `jsdom`, `diff-match-patch`, `archiver`, `unzipper`
+- Key deps: `@harbour-enterprises/superdoc`, `commander`, `jsdom`, `diff-match-patch`, `archiver`, `unzipper`, `fastify`, `fastify-plugin`
 
 **.git/:**
 - Purpose: Version control

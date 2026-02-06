@@ -12,7 +12,7 @@ This roadmap delivers a stateless HTTP API that wraps the existing superdoc-redl
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Fastify server bootstrap with health check, error format, API versioning, and request tracing
+- [x] **Phase 1: Foundation** - Fastify server bootstrap with health check, error format, API versioning, and request tracing
 - [ ] **Phase 2: Auth and Error Handling** - API key authentication middleware and error sanitization
 - [ ] **Phase 3: File Upload Validation** - File size limits, DOCX magic byte validation, and zip bomb protection
 - [ ] **Phase 4: Read Endpoint** - POST /v1/read accepts DOCX upload and returns document IR as JSON
@@ -33,11 +33,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Any error (404, malformed request) returns structured JSON with error.code, error.message, and error.details
   4. The server uses correct HTTP status codes (400 for bad requests, 404 for unknown routes, 500 for server errors)
   5. All endpoints are mounted under the /v1/ URL prefix
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [x] 01-01-PLAN.md — Server bootstrap (Fastify 5, app factory, plugins, health route, request ID, error handler, /v1/ prefix)
+- [x] 01-02-PLAN.md — TDD: Server behavior tests (health, tracing, errors, status codes, versioning)
 
 ### Phase 2: Auth and Error Handling
 **Goal**: Unauthorized requests are rejected before reaching any endpoint, and error responses never leak internal details
@@ -146,7 +146,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|---------------|--------|-----------|
-| 1. Foundation | 0/TBD | Not started | - |
+| 1. Foundation | 2/2 | Complete | 2026-02-06 |
 | 2. Auth and Error Handling | 0/TBD | Not started | - |
 | 3. File Upload Validation | 0/TBD | Not started | - |
 | 4. Read Endpoint | 0/TBD | Not started | - |
