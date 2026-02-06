@@ -91,11 +91,11 @@ Plans:
   2. When multiple requests arrive simultaneously, a concurrency limiter queues excess requests instead of spawning unbounded JSDOM instances
   3. Temp files created during document processing are cleaned up in all code paths (success, error, timeout)
   4. A request that fails mid-processing does not leave behind leaked JSDOM instances or orphaned temp files
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md — Resource management core (editor factory cleanup, concurrency limiter plugin, resource cleanup hook, route integration)
+- [ ] 05-02-PLAN.md — TDD: Resource management tests (cleanup contract, concurrency limiter, sequential requests, error path cleanup)
 
 ### Phase 6: Apply Endpoint Core
 **Goal**: Users can upload a DOCX file with JSON edits and receive a redlined document with tracked changes
