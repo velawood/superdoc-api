@@ -27,9 +27,9 @@
 
 ### Read Endpoint
 
-- [ ] **READ-01**: POST /v1/read accepts multipart DOCX upload and returns document IR as JSON
-- [ ] **READ-02**: Response includes full document structure (blocks, outline, defined terms, ID mapping)
-- [ ] **READ-03**: All chunks returned in single response
+- [x] **READ-01**: POST /v1/read accepts multipart DOCX upload and returns document IR as JSON
+- [x] **READ-02**: Response includes full document structure (blocks, outline, defined terms, ID mapping)
+- [x] **READ-03**: All chunks returned in single response
 
 ### Apply Endpoint
 
@@ -93,9 +93,9 @@
 | AUTH-05 | Phase 3 | Pending |
 | AUTH-06 | Phase 2 | Complete |
 | AUTH-07 | Phase 3 | Pending |
-| READ-01 | Phase 4 | Pending |
-| READ-02 | Phase 4 | Pending |
-| READ-03 | Phase 4 | Pending |
+| READ-01 | Phase 4 | Complete |
+| READ-02 | Phase 4 | Complete |
+| READ-03 | Phase 4 | Complete |
 | APPLY-01 | Phase 6 | Pending |
 | APPLY-02 | Phase 6 | Pending |
 | APPLY-03 | Phase 6 | Pending |
@@ -114,4 +114,4 @@
 
 ---
 *Requirements defined: 2026-02-06*
-*Last updated: 2026-02-06 after Phase 2 completion*
+*Last updated: 2026-02-06 after Phase 4 completion*

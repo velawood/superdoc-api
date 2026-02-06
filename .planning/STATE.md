@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-06)
 
 **Core value:** Users can programmatically edit DOCX documents with track changes via simple HTTP requests, without installing any local tooling.
-**Current focus:** Phase 3 - File Upload Validation
+**Current focus:** Phase 4 - Read Endpoint
 
 ## Current Position
 
-Phase: 3 of 8 (File Upload Validation)
-Plan: 1 of 2 in phase 3 (complete)
-Status: File upload validation complete, tests pending
-Last activity: 2026-02-06 -- Completed 03-01-PLAN.md (File upload validation)
+Phase: 4 of 8 (Read Endpoint) -- COMPLETE
+Plan: 2 of 2 in phase 4 (complete)
+Status: Phase 4 complete, ready for Phase 5
+Last activity: 2026-02-06 -- Completed 04-02-PLAN.md (Read Endpoint Tests)
 
-Progress: [█████░░░░░] 50% (5 of 10 plans)
+Progress: [███████░░░] 87% (7 of 8 plans in phases 1-4)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: 3.1m
-- Total execution time: 15.5 minutes
+- Total plans completed: 7
+- Average duration: 2.6m
+- Total execution time: 18.5 minutes
 
 **By Phase:**
 
@@ -29,12 +29,12 @@ Progress: [█████░░░░░] 50% (5 of 10 plans)
 |-------|-------|-------|----------|
 | 1. Foundation | 2/2 | 7m | 3.5m |
 | 2. Auth and Error Handling | 2/2 | 6.3m | 3.2m |
-
-| 3. File Upload Validation | 1/2 | 3.5m | 3.5m |
+| 3. File Upload Validation | 1/1 | 3.5m | 3.5m |
+| 4. Read Endpoint | 2/2 | 4m | 2m |
 
 **Recent Trend:**
-- Last 5 plans: 02-01 (3.3m), 02-02 (3m), 03-01 (3.5m)
-- Trend: stable
+- Last 5 plans: 02-02 (3m), 03-01 (3.5m), 04-01 (1m), 04-02 (3m)
+- Trend: stable, efficient on small focused plans
 
 *Updated after each plan completion*
 
@@ -61,6 +61,10 @@ Recent decisions affecting current work:
 - [03-01]: Multipart plugin wrapped with fastify-plugin (global, not route-scoped like auth)
 - [03-01]: Named imports work for unzipper despite CJS (Node ESM wrapper handles it)
 - [03-01]: Test suite fixed to work with global multipart plugin (removed custom parser override)
+- [04-01]: Use 422 Unprocessable Entity for extraction failures (file passed validation but content is corrupted)
+- [04-01]: Return full IR by default (blocks, outline, definedTerms, idMapping) - no format parameter yet
+- [04-01]: Log extraction errors server-side but return sanitized message to client
+- [04-02]: Use properly structured ZIP with invalid DOCX content for 422 testing (passes validation but fails extraction)
 
 ### Pending Todos
 
@@ -68,10 +72,10 @@ None.
 
 ### Blockers/Concerns
 
-- [Research]: JSDOM window.close() cleanup pattern needs verification against current docs (MEDIUM confidence)
+- [Research]: JSDOM window.close() cleanup pattern needs verification against current docs (MEDIUM confidence) - Phase 5 priority
 
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Completed 03-01-PLAN.md (File upload validation) -- Phase 3 plan 1 complete
+Stopped at: Completed 04-02-PLAN.md (Read Endpoint Tests) -- Phase 4 complete
 Resume file: None

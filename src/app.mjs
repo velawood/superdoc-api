@@ -3,7 +3,9 @@ import crypto from "node:crypto";
 import bearerAuth from "@fastify/bearer-auth";
 import requestIdPlugin from "./plugins/request-id.mjs";
 import errorHandlerPlugin from "./plugins/error-handler.mjs";
+import multipartPlugin from "./plugins/multipart.mjs";
 import healthRoutes from "./routes/health.mjs";
+import readRoutes from "./routes/read.mjs";
 
 /**
  * Build and return a configured Fastify application instance.
@@ -28,6 +30,7 @@ export default function buildApp(opts = {}) {
   // Register plugins
   app.register(requestIdPlugin);
   app.register(errorHandlerPlugin);
+  app.register(multipartPlugin);
 
   // Health at root level (for infrastructure probes)
   app.register(healthRoutes);
@@ -52,7 +55,7 @@ export default function buildApp(opts = {}) {
     });
 
     scope.register(healthRoutes);
-    // Future: upload routes, read routes, etc.
+    scope.register(readRoutes);
   }, { prefix: "/v1" });
 
   return app;

@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Foundation** - Fastify server bootstrap with health check, error format, API versioning, and request tracing
 - [x] **Phase 2: Auth and Error Handling** - API key authentication middleware and error sanitization
 - [ ] **Phase 3: File Upload Validation** - File size limits, DOCX magic byte validation, and zip bomb protection
-- [ ] **Phase 4: Read Endpoint** - POST /v1/read accepts DOCX upload and returns document IR as JSON
+- [x] **Phase 4: Read Endpoint** - POST /v1/read accepts DOCX upload and returns document IR as JSON
 - [ ] **Phase 5: Resource Management** - JSDOM lifecycle cleanup, concurrency limiting, and temp file management
 - [ ] **Phase 6: Apply Endpoint Core** - POST /v1/apply accepts DOCX + JSON edits and returns redlined DOCX
 - [ ] **Phase 7: Apply Endpoint Extended** - Markdown edit support, dry-run mode, and edit summary headers
@@ -76,11 +76,11 @@ Plans:
   1. POST /v1/read with a valid DOCX file returns 200 with JSON containing the document's block structure, outline, defined terms, and ID mapping
   2. The response includes all chunks in a single JSON payload (no pagination, no streaming)
   3. Invalid or corrupted DOCX files return a clear error (not an unhandled crash or stack trace)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [x] 04-01-PLAN.md — Read route handler (POST /v1/read with validation pipeline + IR extraction)
+- [x] 04-02-PLAN.md — TDD: Read endpoint contract tests (happy path, errors, auth, Content-Type)
 
 ### Phase 5: Resource Management
 **Goal**: The server can process many sequential requests without memory leaks, event loop blocking, or orphaned temp files
@@ -150,7 +150,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 1. Foundation | 2/2 | Complete | 2026-02-06 |
 | 2. Auth and Error Handling | 2/2 | Complete | 2026-02-06 |
 | 3. File Upload Validation | 0/2 | Not started | - |
-| 4. Read Endpoint | 0/2 | Not started | - |
+| 4. Read Endpoint | 2/2 | Complete | 2026-02-06 |
 | 5. Resource Management | 0/TBD | Not started | - |
 | 6. Apply Endpoint Core | 0/TBD | Not started | - |
 | 7. Apply Endpoint Extended | 0/TBD | Not started | - |
