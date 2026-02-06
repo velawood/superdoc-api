@@ -62,10 +62,11 @@ Plans:
   1. Uploading a file larger than the configured size limit (default 50MB) returns 413 with a structured error body
   2. Uploading a non-DOCX file (e.g., a PNG renamed to .docx) is rejected based on magic byte validation (PK\x03\x04 ZIP header)
   3. Uploading a zip bomb (small compressed, enormous decompressed) is detected and rejected before full decompression
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: TBD
+- [ ] 03-01-PLAN.md — Install @fastify/multipart, create multipart plugin, file upload validation module (magic bytes + zip bomb)
+- [ ] 03-02-PLAN.md — TDD: File size limit, magic byte validation, and zip bomb detection tests
 
 ### Phase 4: Read Endpoint
 **Goal**: Users can upload a DOCX file and receive its complete structured representation as JSON

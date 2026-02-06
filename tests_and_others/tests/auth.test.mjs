@@ -133,11 +133,8 @@ describe("Content-Type Validation", () => {
       });
 
       // Test route with requireMultipart preHandler
-      // Note: addContentTypeParser to bypass Fastify's 415 error, letting our hook run
-      scope.addContentTypeParser('multipart/form-data', function (request, payload, done) {
-        done(null);
-      });
-
+      // Note: multipart plugin is now registered globally (Phase 3), so no need
+      // to override content type parser here
       scope.post("/test-upload", {
         preHandler: requireMultipart,
       }, async (request, reply) => {
