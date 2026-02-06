@@ -63,7 +63,6 @@ Recent decisions affecting current work:
 - [03-01]: Test suite fixed to work with global multipart plugin (removed custom parser override)
 - [04-01]: Use 422 Unprocessable Entity for extraction failures (file passed validation but content is corrupted)
 - [04-01]: Return full IR by default (blocks, outline, definedTerms, idMapping) - no format parameter yet
-- [04-01]: Log extraction errors server-side but return sanitized message to client
 - [04-02]: Use properly structured ZIP with invalid DOCX content for 422 testing (passes validation but fails extraction)
 
 ### Pending Todos

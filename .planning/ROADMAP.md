@@ -106,12 +106,12 @@ Plans:
   2. If any edits reference invalid block IDs or fail validation, the entire request is rejected with a full list of validation errors (no partial application)
   3. The returned DOCX file is recompressed (not the inflated SuperDoc output size)
   4. The endpoint handles both the happy path (valid edits applied) and all error paths (bad edits, corrupted DOCX, processing failure) with structured responses
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
-- [ ] 06-03: TBD
+- [ ] 06-01-PLAN.md — Utility modules: in-memory DOCX recompression + buffer-based edit application wrapper
+- [ ] 06-02-PLAN.md — Apply route handler (POST /v1/apply with multipart parsing, validation, edit application, recompression)
+- [ ] 06-03-PLAN.md — TDD: Apply endpoint contract tests (happy path, validation errors, auth, input validation)
 
 ### Phase 7: Apply Endpoint Extended
 **Goal**: The apply endpoint supports markdown edit format, dry-run validation, and returns edit metadata in response headers
