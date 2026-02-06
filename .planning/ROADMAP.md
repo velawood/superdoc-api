@@ -121,11 +121,11 @@ Plans:
   1. POST /v1/apply with markdown-formatted edits (instead of JSON) auto-detects the format, parses to JSON, and applies edits identically to JSON input
   2. POST /v1/apply?dry_run=true validates edits and returns a validation report without producing or returning a DOCX file
   3. Successful apply responses include X-Edits-Applied, X-Edits-Skipped, and X-Warnings headers with accurate counts
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 07-01: TBD
-- [ ] 07-02: TBD
+- [ ] 07-01-PLAN.md — Extend apply route with markdown format auto-detection, dry-run validation mode, and edit summary response headers
+- [ ] 07-02-PLAN.md — TDD: Contract tests for markdown format, dry-run mode, and response header accuracy
 
 ### Phase 8: Production Hardening
 **Goal**: The server handles timeouts and shutdowns gracefully without losing in-flight work or leaking resources
