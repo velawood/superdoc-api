@@ -1,6 +1,40 @@
 import fp from "fastify-plugin";
 
 /**
+ * Check if error message is safe to expose to clients.
+ *
+ * Returns false if message contains:
+ * - File paths (src/, node_modules/, dist/, home/, Users/)
+ * - Stack traces (at function())
+ * - File extensions (.mjs:, .js:, .ts:, .cjs:)
+ *
+ * @param {string} msg - Error message to check
+ * @returns {boolean} True if safe to expose, false otherwise
+ */
+function isSafeMessage(msg) {
+  if (!msg || typeof msg !== "string") {
+    return false;
+  }
+
+  // Check for file path patterns
+  if (/\/(src|node_modules|dist|home|Users)\//i.test(msg)) {
+    return false;
+  }
+
+  // Check for stack trace patterns
+  if (/at\s+\w+\s+\(/i.test(msg)) {
+    return false;
+  }
+
+  // Check for file extension patterns
+  if (/\.(mjs|js|ts|cjs):/i.test(msg)) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Error handler plugin - structured JSON error responses.
  *
  * Configures both setNotFoundHandler (404) and setErrorHandler (all other errors)
@@ -44,12 +78,21 @@ async function errorHandlerPlugin(fastify, opts) {
 
     // Use error.statusCode if set, otherwise 500
     const statusCode = error.statusCode || 500;
+
+    // Determine safe error message
+    let message;
+    if (statusCode >= 500) {
+      message = "An internal server error occurred";
+    } else if (isSafeMessage(error.message)) {
+      message = error.message;
+    } else {
+      message = "Bad request";
+    }
+
     reply.status(statusCode).send({
       error: {
-        code: error.code || "INTERNAL_ERROR",
-        message: statusCode >= 500
-          ? "An internal server error occurred"
-          : error.message,
+        code: error.code || (statusCode >= 500 ? "INTERNAL_ERROR" : "BAD_REQUEST"),
+        message,
         details: [],
       },
     });

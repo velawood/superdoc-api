@@ -17,12 +17,12 @@
 
 ### Authentication & Security
 
-- [ ] **AUTH-01**: API key validation via Authorization: Bearer header (timing-safe comparison)
-- [ ] **AUTH-02**: Reject requests with missing or invalid API key with 401
+- [x] **AUTH-01**: API key validation via Authorization: Bearer header (timing-safe comparison)
+- [x] **AUTH-02**: Reject requests with missing or invalid API key with 401
 - [ ] **AUTH-03**: File size limit enforcement (50MB default, configurable via env var), reject with 413
-- [ ] **AUTH-04**: Content-Type validation (require multipart/form-data for upload endpoints)
+- [x] **AUTH-04**: Content-Type validation (require multipart/form-data for upload endpoints)
 - [ ] **AUTH-05**: DOCX magic byte validation (PK\x03\x04 ZIP header check)
-- [ ] **AUTH-06**: Error sanitization — never expose internal paths, stack traces, or library details in responses
+- [x] **AUTH-06**: Error sanitization — never expose internal paths, stack traces, or library details in responses
 - [ ] **AUTH-07**: Zip bomb protection — check decompressed ZIP size before processing
 
 ### Read Endpoint
@@ -86,12 +86,12 @@
 | INFRA-05 | Phase 8 | Pending |
 | INFRA-06 | Phase 8 | Pending |
 | INFRA-07 | Phase 1 | Complete |
-| AUTH-01 | Phase 2 | Pending |
-| AUTH-02 | Phase 2 | Pending |
+| AUTH-01 | Phase 2 | Complete |
+| AUTH-02 | Phase 2 | Complete |
 | AUTH-03 | Phase 3 | Pending |
-| AUTH-04 | Phase 2 | Pending |
+| AUTH-04 | Phase 2 | Complete |
 | AUTH-05 | Phase 3 | Pending |
-| AUTH-06 | Phase 2 | Pending |
+| AUTH-06 | Phase 2 | Complete |
 | AUTH-07 | Phase 3 | Pending |
 | READ-01 | Phase 4 | Pending |
 | READ-02 | Phase 4 | Pending |
@@ -114,4 +114,4 @@
 
 ---
 *Requirements defined: 2026-02-06*
-*Last updated: 2026-02-06 after roadmap creation*
+*Last updated: 2026-02-06 after Phase 2 completion*

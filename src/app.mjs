@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import crypto from "node:crypto";
+import bearerAuth from "@fastify/bearer-auth";
 import requestIdPlugin from "./plugins/request-id.mjs";
 import errorHandlerPlugin from "./plugins/error-handler.mjs";
 import healthRoutes from "./routes/health.mjs";
@@ -12,6 +13,7 @@ import healthRoutes from "./routes/health.mjs";
  *
  * @param {object} [opts={}] - Configuration options
  * @param {boolean|object} [opts.logger] - Pino logger config or false to disable
+ * @param {string} [opts.apiKey] - API key for Bearer auth (for testing; overrides API_KEY env var)
  * @returns {import("fastify").FastifyInstance} Configured Fastify instance
  */
 export default function buildApp(opts = {}) {
@@ -30,8 +32,28 @@ export default function buildApp(opts = {}) {
   // Health at root level (for infrastructure probes)
   app.register(healthRoutes);
 
-  // Health under /v1 (for API consistency)
-  app.register(healthRoutes, { prefix: "/v1" });
+  // Protected /v1 routes (Bearer auth required)
+  app.register(async function protectedRoutes(scope) {
+    const apiKey = opts.apiKey || process.env.API_KEY;
+
+    if (!apiKey) {
+      throw new Error("API_KEY environment variable is required");
+    }
+
+    await scope.register(bearerAuth, {
+      keys: new Set([apiKey]),
+      errorResponse: () => ({
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Invalid or missing API key",
+          details: [],
+        },
+      }),
+    });
+
+    scope.register(healthRoutes);
+    // Future: upload routes, read routes, etc.
+  }, { prefix: "/v1" });
 
   return app;
 }

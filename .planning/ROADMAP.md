@@ -13,7 +13,7 @@ This roadmap delivers a stateless HTTP API that wraps the existing superdoc-redl
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - Fastify server bootstrap with health check, error format, API versioning, and request tracing
-- [ ] **Phase 2: Auth and Error Handling** - API key authentication middleware and error sanitization
+- [x] **Phase 2: Auth and Error Handling** - API key authentication middleware and error sanitization
 - [ ] **Phase 3: File Upload Validation** - File size limits, DOCX magic byte validation, and zip bomb protection
 - [ ] **Phase 4: Read Endpoint** - POST /v1/read accepts DOCX upload and returns document IR as JSON
 - [ ] **Phase 5: Resource Management** - JSDOM lifecycle cleanup, concurrency limiting, and temp file management
@@ -48,11 +48,11 @@ Plans:
   2. Requests with missing or invalid API key receive 401 with structured error body (no details about why the key is wrong)
   3. POST requests to upload endpoints without multipart/form-data Content-Type receive 400 with clear error message
   4. When the server encounters an internal error, the response contains a safe error code and message -- no file paths, stack traces, or library details
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [x] 02-01-PLAN.md — Auth plugin, Content-Type hook, and error sanitization implementation
+- [x] 02-02-PLAN.md — TDD: Auth, Content-Type validation, and error sanitization tests
 
 ### Phase 3: File Upload Validation
 **Goal**: Malicious or oversized file uploads are rejected before any document processing begins
@@ -147,9 +147,9 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|---------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete | 2026-02-06 |
-| 2. Auth and Error Handling | 0/TBD | Not started | - |
-| 3. File Upload Validation | 0/TBD | Not started | - |
-| 4. Read Endpoint | 0/TBD | Not started | - |
+| 2. Auth and Error Handling | 2/2 | Complete | 2026-02-06 |
+| 3. File Upload Validation | 0/2 | Not started | - |
+| 4. Read Endpoint | 0/2 | Not started | - |
 | 5. Resource Management | 0/TBD | Not started | - |
 | 6. Apply Endpoint Core | 0/TBD | Not started | - |
 | 7. Apply Endpoint Extended | 0/TBD | Not started | - |

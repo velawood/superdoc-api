@@ -15,7 +15,7 @@ describe("Health Check", () => {
   let app;
 
   before(async () => {
-    app = buildApp({ logger: false });
+    app = buildApp({ logger: false, apiKey: 'test-key' });
     await app.ready();
   });
 
@@ -31,7 +31,11 @@ describe("Health Check", () => {
   });
 
   it("GET /v1/health returns 200 with {status:ok}", async () => {
-    const res = await app.inject({ method: "GET", url: "/v1/health" });
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/health",
+      headers: { authorization: "Bearer test-key" }
+    });
 
     assert.equal(res.statusCode, 200);
     assert.deepEqual(res.json(), { status: "ok" });
@@ -54,7 +58,7 @@ describe("Request ID Tracing", () => {
   let app;
 
   before(async () => {
-    app = buildApp({ logger: false });
+    app = buildApp({ logger: false, apiKey: 'test-key' });
     await app.ready();
   });
 
@@ -128,7 +132,7 @@ describe("Structured Errors", () => {
   let app;
 
   before(async () => {
-    app = buildApp({ logger: false });
+    app = buildApp({ logger: false, apiKey: 'test-key' });
     await app.ready();
   });
 
@@ -176,14 +180,13 @@ describe("HTTP Status Codes", () => {
   let app;
 
   before(async () => {
-    app = buildApp({ logger: false });
+    app = buildApp({ logger: false, apiKey: 'test-key' });
 
-    // Register a route that throws an unhandled error (for 500 testing)
+    // Register test routes at root level (unprotected, for error testing)
     app.get("/test-error", async () => {
       throw new Error("test boom");
     });
 
-    // Register a route with JSON schema validation (for 400 testing)
     app.post("/test-validate", {
       schema: {
         body: {
@@ -253,7 +256,7 @@ describe("API Versioning", () => {
   let app;
 
   before(async () => {
-    app = buildApp({ logger: false });
+    app = buildApp({ logger: false, apiKey: 'test-key' });
     await app.ready();
   });
 
@@ -262,7 +265,11 @@ describe("API Versioning", () => {
   });
 
   it("GET /v1/health returns 200 (endpoints exist under /v1/)", async () => {
-    const res = await app.inject({ method: "GET", url: "/v1/health" });
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/health",
+      headers: { authorization: "Bearer test-key" }
+    });
 
     assert.equal(res.statusCode, 200);
   });
@@ -281,7 +288,7 @@ describe("Edge Cases", () => {
   let app;
 
   before(async () => {
-    app = buildApp({ logger: false });
+    app = buildApp({ logger: false, apiKey: 'test-key' });
     await app.ready();
   });
 
